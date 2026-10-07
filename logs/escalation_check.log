@@ -1,0 +1,575 @@
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+Database connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itPHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:233
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 233
+^CPHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+PHP Fatal error:  Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+
+Fatal error: Uncaught Error: Call to undefined function isIgnoredSender() in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php:116
+Stack trace:
+#0 {main}
+  thrown in C:\xampp\htdocs\escalation-tracker\cron\check_escalations.php on line 116
+^C2 reminder(s) sent. 6 ticket(s) moved to next level.
+^C13 reminder(s) sent. 14 ticket(s) moved to next level.
+Sender mailbox Remindertask@afcindia.in is unavailable: Resource 'Remindertask@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Remindertask@afcindia.in is unavailable: Resource 'Remindertask@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Remindertask@afcindia.in is unavailable: Resource 'Remindertask@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Remindertask@afcindia.in is unavailable: Resource 'Remindertask@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Remindertask@afcindia.in is unavailable: Resource 'Remindertask@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Remindertask@afcindia.in is unavailable: Resource 'Remindertask@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Remindertask@afcindia.in is unavailable: Resource 'Remindertask@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Remindertask@afcindia.in is unavailable: Resource 'Remindertask@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Remindertask@afcindia.in is unavailable: Resource 'Remindertask@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Remindertask@afcindia.in is unavailable: Resource 'Remindertask@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Remindertask@afcindia.in is unavailable: Resource 'Remindertask@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox admin@afc.in is unavailable: Resource 'admin@afc.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox admin@afc.in is unavailable: Resource 'admin@afc.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox admin@afc.in is unavailable: Resource 'admin@afc.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox admin@afc.in is unavailable: Resource 'admin@afc.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox admin@afc.in is unavailable: Resource 'admin@afc.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox admin@afc.in is unavailable: Resource 'admin@afc.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox admin@afc.in is unavailable: Resource 'admin@afc.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox admin@afc.in is unavailable: Resource 'admin@afc.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Afcadmin@afcindia.in is unavailable: Resource 'Afcadmin@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Afcadmin@afcindia.in is unavailable: Resource 'Afcadmin@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Afcadmin@afcindia.in is unavailable: Resource 'Afcadmin@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+Sender mailbox Afcadmin@afcindia.in is unavailable: Resource 'Afcadmin@afcindia.in' does not exist or one of its queried reference-property objects are not present.
+No reminders were sent and no tickets were advanced.
+^C^C0 reminder(s) sent. 3 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+^C0 reminder(s) sent. 1 ticket(s) moved to next level.
+^C3 reminder(s) sent. 3 ticket(s) moved to next level.
+3 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+1 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 2 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 1 ticket(s) moved to next level.
+5 reminder(s) sent. 0 ticket(s) moved to next level.
+3 reminder(s) sent. 2 ticket(s) moved to next level.
+0 reminder(s) sent. 6 ticket(s) moved to next level.
+2 reminder(s) sent. 3 ticket(s) moved to next level.
+1 reminder(s) sent. 2 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 5 ticket(s) moved to next level.
+2 reminder(s) sent. 2 ticket(s) moved to next level.
+1 reminder(s) sent. 1 ticket(s) moved to next level.
+1 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+1 reminder(s) sent. 1 ticket(s) moved to next level.
+1 reminder(s) sent. 2 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+4 reminder(s) sent. 3 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+1 reminder(s) sent. 1 ticket(s) moved to next level.
+1 reminder(s) sent. 2 ticket(s) moved to next level.
+2 reminder(s) sent. 2 ticket(s) moved to next level.
+1 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+6 reminder(s) sent. 9 ticket(s) moved to next level.
+0 reminder(s) sent. 3 ticket(s) moved to next level.
+1 reminder(s) sent. 2 ticket(s) moved to next level.
+4 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+2 reminder(s) sent. 0 ticket(s) moved to next level.
+2 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 2 ticket(s) moved to next level.
+^C4 reminder(s) sent. 3 ticket(s) moved to next level.
+2 reminder(s) sent. 5 ticket(s) moved to next level.
+^C1 reminder(s) sent. 7 ticket(s) moved to next level.
+6 reminder(s) sent. 5 ticket(s) moved to next level.
+^C2 reminder(s) sent. 6 ticket(s) moved to next level.
+0 reminder(s) sent. 3 ticket(s) moved to next level.
+^C5 reminder(s) sent. 5 ticket(s) moved to next level.
+2 reminder(s) sent. 0 ticket(s) moved to next level.
+3 reminder(s) sent. 3 ticket(s) moved to next level.
+^C1 reminder(s) sent. 1 ticket(s) moved to next level.
+^C1 reminder(s) sent. 4 ticket(s) moved to next level.
+^C0 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+2 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+3 reminder(s) sent. 4 ticket(s) moved to next level.
+10 reminder(s) sent. 4 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 2 ticket(s) moved to next level.
+2 reminder(s) sent. 2 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+5 reminder(s) sent. 2 ticket(s) moved to next level.
+0 reminder(s) sent. 8 ticket(s) moved to next level.
+3 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+Graph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+^CGraph API app-only token fetch failed: Unknown error
+No Graph access token available. No reminders were sent.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+Database connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it^C10 reminder(s) sent. 24 ticket(s) moved to next level.
+9 reminder(s) sent. 7 ticket(s) moved to next level.
+^C^C5 reminder(s) sent. 0 ticket(s) moved to next level.
+3 reminder(s) sent. 7 ticket(s) moved to next level.
+0 reminder(s) sent. 2 ticket(s) moved to next level.
+3 reminder(s) sent. 7 ticket(s) moved to next level.
+^C1 reminder(s) sent. 2 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+^C15 reminder(s) sent. 18 ticket(s) moved to next level.
+^C0 reminder(s) sent. 5 ticket(s) moved to next level.
+^C^C0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 1 ticket(s) moved to next level.
+16 reminder(s) sent. 13 ticket(s) moved to next level.
+2 reminder(s) sent. 4 ticket(s) moved to next level.
+^C1 reminder(s) sent. 3 ticket(s) moved to next level.
+^C^C^C3 reminder(s) sent. 7 ticket(s) moved to next level.
+^C0 reminder(s) sent. 3 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+Database connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it^C^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it2 reminder(s) sent. 4 ticket(s) moved to next level.
+^C^C12 reminder(s) sent. 5 ticket(s) moved to next level.
+1 reminder(s) sent. 0 ticket(s) moved to next level.
+Database connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it^C^C^C^C^C^C^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it^C^C^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+2 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+^C1 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 1 ticket(s) moved to next level.
+2 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 3 ticket(s) moved to next level.
+4 reminder(s) sent. 2 ticket(s) moved to next level.
+^C1 reminder(s) sent. 1 ticket(s) moved to next level.
+^C^C^C^C^C0 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+^C2 reminder(s) sent. 14 ticket(s) moved to next level.
+1 reminder(s) sent. 0 ticket(s) moved to next level.
+^C^C0 reminder(s) sent. 3 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+13 reminder(s) sent. 8 ticket(s) moved to next level.
+^C^C0 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+6 reminder(s) sent. 5 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+^C^C^C^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it15 reminder(s) sent. 19 ticket(s) moved to next level.
+0 reminder(s) sent. 2 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+10 reminder(s) sent. 6 ticket(s) moved to next level.
+1 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+^C^C1 reminder(s) sent. 1 ticket(s) moved to next level.
+^C12 reminder(s) sent. 11 ticket(s) moved to next level.
+^C^C0 reminder(s) sent. 2 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+^C^C14 reminder(s) sent. 12 ticket(s) moved to next level.
+4 reminder(s) sent. 4 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+3 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 2 ticket(s) moved to next level.
+2 reminder(s) sent. 2 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+^C0 reminder(s) sent. 0 ticket(s) moved to next level.
+7 reminder(s) sent. 5 ticket(s) moved to next level.
+1 reminder(s) sent. 0 ticket(s) moved to next level.
+^C^C0 reminder(s) sent. 2 ticket(s) moved to next level.
+^C4 reminder(s) sent. 1 ticket(s) moved to next level.
+6 reminder(s) sent. 6 ticket(s) moved to next level.
+1 reminder(s) sent. 0 ticket(s) moved to next level.
+6 reminder(s) sent. 15 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it0 reminder(s) sent. 0 ticket(s) moved to next level.
+^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+12 reminder(s) sent. 6 ticket(s) moved to next level.
+7 reminder(s) sent. 5 ticket(s) moved to next level.
+1 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 6 ticket(s) moved to next level.
+5 reminder(s) sent. 4 ticket(s) moved to next level.
+^C0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 3 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it^C^C^C^C^C0 reminder(s) sent. 16 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+12 reminder(s) sent. 10 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 2 ticket(s) moved to next level.
+1 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+Database connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it^C^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it1 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+9 reminder(s) sent. 23 ticket(s) moved to next level.
+2 reminder(s) sent. 2 ticket(s) moved to next level.
+^C0 reminder(s) sent. 6 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+32 reminder(s) sent. 26 ticket(s) moved to next level.
+1 reminder(s) sent. 1 ticket(s) moved to next level.
+0 reminder(s) sent. 4 ticket(s) moved to next level.
+3 reminder(s) sent. 2 ticket(s) moved to next level.
+Database connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+3 reminder(s) sent. 0 ticket(s) moved to next level.
+2 reminder(s) sent. 0 ticket(s) moved to next level.
+2 reminder(s) sent. 2 ticket(s) moved to next level.
+0 reminder(s) sent. 5 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+11 reminder(s) sent. 6 ticket(s) moved to next level.
+2 reminder(s) sent. 4 ticket(s) moved to next level.
+^C^C1 reminder(s) sent. 5 ticket(s) moved to next level.
+0 reminder(s) sent. 2 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused itDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+1 reminder(s) sent. 0 ticket(s) moved to next level.
+^C1 reminder(s) sent. 0 ticket(s) moved to next level.
+^CDatabase connection failed: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it0 reminder(s) sent. 8 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+^C0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.
+0 reminder(s) sent. 0 ticket(s) moved to next level.

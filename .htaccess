@@ -1,0 +1,8 @@
+Options -Indexes
+
+<FilesMatch "\.(env|ini|log|sql|bak|old|orig|dist|pem|key)$">
+    Require all denied
+</FilesMatch>
+
+RewriteEngine On
+RewriteRule ^(?:config|database|includes|cron|logs)(?:/|$) - [F,L,NC]
