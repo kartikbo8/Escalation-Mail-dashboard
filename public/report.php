@@ -7,7 +7,15 @@ $pdo = getDB();
 
 // Overall status counts for keyword-matched, queued, or escalated tickets only
 $ticketScope = "(is_important = 1 OR escalation_queued = 1 OR status = 'escalated')";
-$statusCounts = $pdo->query("SELECT status, COUNT(*) as total FROM tickets t WHERE " . portalTicketCondition('t') . " AND {$ticketScope} GROUP BY status")
+$statusCounts = $pdo->query(
+    "SELECT CASE WHEN t.escalation_level >= 2 OR t.status = 'escalated'
+                 THEN 'escalated' ELSE t.status END AS status,
+            COUNT(*) as total
+     FROM tickets t
+     WHERE " . portalTicketCondition('t') . " AND {$ticketScope}
+     GROUP BY CASE WHEN t.escalation_level >= 2 OR t.status = 'escalated'
+                   THEN 'escalated' ELSE t.status END"
+)
     ->fetchAll(PDO::FETCH_KEY_PAIR);
 foreach (['open', 'replied', 'closed', 'escalated'] as $s) {
     if (!isset($statusCounts[$s])) $statusCounts[$s] = 0;
@@ -19,7 +27,7 @@ $deptStats = $pdo->query(
         SUM(CASE WHEN t.status = 'open' THEN 1 ELSE 0 END) as open_count,
         SUM(CASE WHEN t.status = 'replied' THEN 1 ELSE 0 END) as replied_count,
         SUM(CASE WHEN t.status = 'closed' THEN 1 ELSE 0 END) as closed_count,
-        SUM(CASE WHEN t.status = 'escalated' THEN 1 ELSE 0 END) as escalated_count,
+        SUM(CASE WHEN t.escalation_level >= 2 OR t.status = 'escalated' THEN 1 ELSE 0 END) as escalated_count,
         COUNT(t.id) as total
      FROM departments d
     LEFT JOIN tickets t ON t.department_id = d.id AND " . portalTicketCondition('t') . " AND {$ticketScope}
@@ -34,7 +42,8 @@ $escalatedTickets = $pdo->query(
      FROM tickets t
      JOIN departments d ON d.id = t.department_id
      LEFT JOIN users u ON u.id = t.assigned_to
-    WHERE t.status = 'escalated' AND " . portalTicketCondition('t') . " AND {$ticketScope}
+    WHERE (t.escalation_level >= 2 OR t.status = 'escalated')
+      AND " . portalTicketCondition('t') . " AND {$ticketScope}
      ORDER BY t.sla_due_at ASC"
 )->fetchAll();
 

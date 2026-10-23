@@ -116,6 +116,37 @@ function portalDepartmentId() {
     return isset($_SESSION['portal_department_id']) ? (int)$_SESSION['portal_department_id'] : null;
 }
 
+function portalDepartmentIds() {
+    static $departmentIds = false;
+    if ($departmentIds !== false) {
+        return $departmentIds;
+    }
+
+    if (($_SESSION['role'] ?? '') === 'super_admin') {
+        $selectedDepartmentId = portalDepartmentId();
+        $departmentIds = $selectedDepartmentId === null ? null : [$selectedDepartmentId];
+        return $departmentIds;
+    }
+
+    $departmentId = (int)($_SESSION['department_id'] ?? 0);
+    if ($departmentId > 0) {
+        $departmentIds = [$departmentId];
+        return $departmentIds;
+    }
+
+    if (($_SESSION['role'] ?? '') !== 'admin' || empty($_SESSION['user_id'])) {
+        $departmentIds = [];
+        return $departmentIds;
+    }
+
+    $pdo = getDB();
+    $stmt = $pdo->prepare("SELECT id FROM departments WHERE hod_user_id = ?");
+    $userId = (int)$_SESSION['user_id'];
+    $stmt->execute([$userId]);
+    $departmentIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    return $departmentIds;
+}
+
 function portalDepartmentName() {
     if (!empty($_SESSION['portal_department_name'])) {
         return $_SESSION['portal_department_name'];
@@ -132,11 +163,25 @@ function portalDepartmentName() {
 }
 
 function portalTicketCondition($alias = 't') {
-    return portalDepartmentId() === null ? '1=1' : $alias . '.department_id = ' . portalDepartmentId();
+    $departmentIds = portalDepartmentIds();
+    if ($departmentIds === null) {
+        return '1=1';
+    }
+    if (!$departmentIds) {
+        return '1=0';
+    }
+    return $alias . '.department_id IN (' . implode(',', $departmentIds) . ')';
 }
 
 function portalDepartmentCondition($alias = 'd') {
-    return portalDepartmentId() === null ? '1=1' : $alias . '.id = ' . portalDepartmentId();
+    $departmentIds = portalDepartmentIds();
+    if ($departmentIds === null) {
+        return '1=1';
+    }
+    if (!$departmentIds) {
+        return '1=0';
+    }
+    return $alias . '.id IN (' . implode(',', $departmentIds) . ')';
 }
 
 function portalUrl($path) {

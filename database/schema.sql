@@ -156,6 +156,7 @@ CREATE TABLE tickets (
     subject VARCHAR(500) NOT NULL,
     sender_name VARCHAR(255) DEFAULT NULL,
     sender_email VARCHAR(255) NOT NULL,
+    to_recipients_json TEXT DEFAULT NULL,      -- original To recipients; CC is intentionally excluded
     conversation_id VARCHAR(500) NOT NULL,     -- Graph API conversationId, used to match replies
     graph_message_id VARCHAR(500) DEFAULT NULL, -- original message id from Graph API
     source_mailbox VARCHAR(255) DEFAULT NULL,   -- mailbox containing the original Graph message

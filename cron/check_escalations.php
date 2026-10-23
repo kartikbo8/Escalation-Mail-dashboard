@@ -6,8 +6,9 @@
  *
  * THREE-LEVEL ESCALATION FLOW (per HR's Email Response & Escalation Matrix):
  *
- *   Level 1 (escalation_level = 0): Assigned employee has 48 working hours
- *            to reply. Reminder sent at the 24-hour halfway point.
+ *   Level 1 (escalation_level = 0): Assigned employee has the configured
+ *            response window. EOD + acknowledgement mails get a reminder
+ *            after 2 working hours and a 4-hour response window.
  *   Level 2 (escalation_level = 1): If still no reply after the employee
  *            window, the
  *            employee's Reporting Manager + Department HOD are notified.
@@ -121,18 +122,59 @@ function getNorthDesignEscalationRecipients($pdo) {
     ];
 }
 
-function getNorthDesignGroupRecipients($pdo) {
+function isNorthDesignTicket($ticket) {
+    if (strtolower(trim((string)($ticket['sender_email'] ?? ''))) === 'northdesign@afcindia.in') {
+        return true;
+    }
+
+    $recipients = json_decode((string)($ticket['to_recipients_json'] ?? ''), true);
+    if (!is_array($recipients)) {
+        return false;
+    }
+
+    foreach ($recipients as $recipient) {
+        if (is_string($recipient) && strtolower(trim($recipient)) === 'northdesign@afcindia.in') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function getNorthDesignReminderRecipients($pdo, $ticket, $assignee) {
+    if ($assignee && !empty($assignee['reporting_manager_id'])) {
+        $manager = getUser($pdo, $assignee['reporting_manager_id']);
+        if (
+            $manager
+            && !empty($manager['is_active'])
+            && !empty($manager['email'])
+            && (int)$manager['department_id'] === (int)$ticket['department_id']
+        ) {
+            return [$manager];
+        }
+    }
+
     $stmt = $pdo->prepare(
         "SELECT u.*
-         FROM users u
-         JOIN departments d ON d.id = u.department_id
-         WHERE u.is_active = 1
-                     AND u.monitor_mailbox = 1
-           AND LOWER(d.mailbox_email) = 'northdesign@afcindia.in'
-         ORDER BY u.name"
+         FROM departments d
+         JOIN users u ON u.id = d.hod_user_id
+         WHERE d.id = ? AND u.is_active = 1"
     );
-    $stmt->execute();
-    return $stmt->fetchAll();
+    $stmt->execute([(int)$ticket['department_id']]);
+    $hod = $stmt->fetch();
+    if ($hod && !empty($hod['email'])) {
+        return [$hod];
+    }
+
+    $contactStmt = $pdo->prepare(
+        "SELECT *
+         FROM escalation_contacts
+         WHERE role_type IN ('hr', 'admin')
+           AND (department_id = ? OR department_id IS NULL)
+         ORDER BY CASE role_type WHEN 'hr' THEN 1 ELSE 2 END, name"
+    );
+    $contactStmt->execute([(int)$ticket['department_id']]);
+    return $contactStmt->fetchAll();
 }
 
 function getEscalationRecipientsForTicket($pdo, $ticket, $assignee, $manager1, $manager2, $hod) {
@@ -194,18 +236,19 @@ function originalMailContext($accessToken, $ticket, $assignee) {
 // STAGE A: Reminders (halfway through the CURRENT level's window)
 // Group by conversation_id to send ONE reminder per conversation, not per ticket
 // ------------------------------------------------------------
-$reminderReceivedClause = $reminderDate === null
-    ? "AND t.received_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY)"
-    : '';
 $reminderStmt = $pdo->query(
         "SELECT t.*, d.name as department_name, d.hod_user_id,
             d.mailbox_email AS notification_mailbox FROM tickets t
      JOIN departments d ON d.id = t.department_id
      JOIN users mailbox_owner ON mailbox_owner.id = t.assigned_to
          WHERE mailbox_owner.is_active = 1
-           AND mailbox_owner.monitor_mailbox = 1
+           AND (
+               mailbox_owner.monitor_mailbox = 1
+               OR LOWER(COALESCE(t.to_recipients_json, '')) LIKE '%northdesign@afcindia.in%'
+               OR LOWER(t.sender_email) = 'northdesign@afcindia.in'
+           )
                      AND t.status = 'open' AND t.escalation_level = 0
-                     {$reminderReceivedClause}
+                     AND t.sla_due_at IS NOT NULL AND t.sla_due_at > NOW()
                      AND t.reminder_sent_at IS NULL
                      AND t.is_important = 1 AND t.escalation_queued = 1
                      AND LOWER(t.sender_email) NOT IN (
@@ -228,7 +271,12 @@ foreach ($reminderStmt->fetchAll() as $ticket) {
     if (isIgnoredSender($ticket['sender_email']) || isExcludedSubject($ticket['subject'])) continue;
 
     $stageStart = $ticket['stage_started_at'] ?: $ticket['received_at'];
-    $reminderDue = calculateReminderDueDate($stageStart, $ticket['department_id'], $ticket['sender_email']);
+    $reminderDue = calculateReminderDueDate(
+        $stageStart,
+        $ticket['department_id'],
+        $ticket['sender_email'],
+        $ticket['matched_keyword']
+    );
 
     if (($reminderDate !== null && substr($reminderDue, 0, 10) !== $reminderDate)
         || $reminderDue > date('Y-m-d H:i:s')) {
@@ -243,16 +291,17 @@ foreach ($reminderStmt->fetchAll() as $ticket) {
     $originalMail = ['html' => '', 'attachments' => []];
 
     if ($level === 0) {
-        if ($assignee && empty($ticket['stop_employee_notifications'])) {
-            if (strtolower(trim((string)$ticket['sender_email'])) === 'northdesign@afcindia.in') {
-                foreach (getNorthDesignGroupRecipients($pdo) as $groupMember) {
-                    if (!empty($groupMember['email'])) {
-                        $recipients[$groupMember['email']] = $groupMember;
+        if (isNorthDesignTicket($ticket)) {
+            if (empty($ticket['stop_manager_notifications'])) {
+                foreach (getNorthDesignReminderRecipients($pdo, $ticket, $assignee) as $reminderRecipient) {
+                    if (empty($reminderRecipient['email'])) {
+                        continue;
                     }
+                    $recipients[$reminderRecipient['email']] = $reminderRecipient;
                 }
-            } else {
-                $recipients[$assignee['email']] = $assignee;
             }
+        } elseif ($assignee && empty($ticket['stop_employee_notifications'])) {
+            $recipients[$assignee['email']] = $assignee;
         }
 
         $recipients = array_values($recipients);
@@ -281,8 +330,16 @@ foreach ($reminderStmt->fetchAll() as $ticket) {
     }
 
     if (!$recipients) {
-        logTimelineEvent($ticket['id'], 'no_reply_warning',
-            $level === 0 ? 'Level 1 reminder skipped: no employee recipient' : 'Level 2 reminder skipped: no Manager/HOD recipient');
+        if ($level === 0 && isNorthDesignTicket($ticket)) {
+            $skipReason = empty($ticket['stop_manager_notifications'])
+                ? 'Level 1 reminder skipped: no active department manager, HOD, or HR/Admin contact is configured'
+                : 'Level 1 reminder skipped: manager/HOD notifications are paused';
+        } else {
+            $skipReason = $level === 0
+                ? 'Level 1 reminder skipped: no employee recipient'
+                : 'Level 2 reminder skipped: no Manager/HOD recipient';
+        }
+        logTimelineEvent($ticket['id'], 'no_reply_warning', $skipReason);
     }
 
     $reminderCount++;
@@ -361,9 +418,12 @@ $dueStmt = $pdo->query(
      JOIN departments d ON d.id = t.department_id
      JOIN users mailbox_owner ON mailbox_owner.id = t.assigned_to
          WHERE mailbox_owner.is_active = 1
-           AND mailbox_owner.monitor_mailbox = 1
+           AND (
+               mailbox_owner.monitor_mailbox = 1
+               OR LOWER(COALESCE(t.to_recipients_json, '')) LIKE '%northdesign@afcindia.in%'
+               OR LOWER(t.sender_email) = 'northdesign@afcindia.in'
+           )
            AND t.status = 'open' AND t.sla_due_at IS NOT NULL AND t.sla_due_at <= NOW()
-                     AND t.received_at >= DATE_SUB(CURDATE(), INTERVAL 1 DAY)
              AND LOWER(t.sender_email) NOT IN (
                  'hrms@afcindia.in', 'noreply.afcone@afcindia.in',
                  'afcdesign@afcindia.in', 'legal@afcindia.in', 'sales09@afcindia.in',
@@ -382,13 +442,13 @@ foreach ($dueStmt->fetchAll() as $ticket) {
 
     $level = (int)$ticket['escalation_level'];
 
-    // Per HR's matrix: only emails flagged "important" (subject matched one of
+    // Per HR's matrix: only emails flagged "important" (subject/body matched one of
     // the configured keywords, and is queued for escalation) go through
     // Level 2/3 escalation. A non-important email that breaches SLA stays
     // with the employee - it is NOT escalated to Manager/HOD/Director/HR.
     if (empty($ticket['is_important']) || empty($ticket['escalation_queued'])) {
         logTimelineEvent($ticket['id'], 'no_reply_warning',
-            'SLA breached but not flagged important (no subject keyword matched) - NOT escalated per policy (stays with employee)');
+            'SLA breached but not flagged important (no subject/body keyword matched) - NOT escalated per policy (stays with employee)');
         continue;
     }
 
@@ -416,8 +476,8 @@ foreach ($dueStmt->fetchAll() as $ticket) {
                  stage_started_at = ?,
                  sla_due_at = ?,
                  reminder_sent_at = NULL,
-                 status = 'closed',
-                 closed_at = NOW()
+                 status = 'open',
+                 closed_at = NULL
              WHERE id = ?"
         )->execute([$newStageStart, $newDue, $ticket['id']]);
 
@@ -477,7 +537,7 @@ foreach ($dueStmt->fetchAll() as $ticket) {
         $pdo->prepare(
             "UPDATE tickets
              SET escalation_level = 2,
-                 status = 'closed',
+                 status = 'escalated',
                  closed_at = NOW()
              WHERE id = ?"
         )->execute([$ticket['id']]);
@@ -554,6 +614,7 @@ foreach ($escalationGroups as $group) {
         if ($currentTicket && (
             $currentTicket['status'] === 'open'
             || ($currentTicket['status'] === 'closed' && (int)$currentTicket['escalation_level'] === $expectedLevel)
+            || ($currentTicket['status'] === 'escalated' && (int)$currentTicket['escalation_level'] === $expectedLevel)
         )) {
             $openItems[] = $item;
         }

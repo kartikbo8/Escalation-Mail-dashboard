@@ -149,7 +149,7 @@ $allUsersStmt->execute();
 $allUsers = $allUsersStmt->fetchAll();
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 users-page-header">
     <h3 class="mb-0">Users &amp; Reporting Hierarchy</h3>
     <a href="escalation_matrix_export.php" class="btn btn-success">Download Excel Sheet</a>
 </div>
@@ -213,15 +213,16 @@ $allUsers = $allUsersStmt->fetchAll();
     </div>
 </div>
 
-<div class="card shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center gap-2">
+<div class="card shadow-sm users-list-card">
+    <div class="card-header d-flex justify-content-between align-items-center gap-2 users-list-header">
         <span>All Users</span>
-        <form method="GET" class="d-flex gap-2">
+        <form method="GET" class="d-flex gap-2 users-search-form">
             <input type="search" name="search" class="form-control form-control-sm" placeholder="Search users" value="<?= htmlspecialchars($userSearch) ?>">
             <button type="submit" class="btn btn-sm btn-primary">Search</button>
         </form>
     </div>
-    <table class="table table-hover mb-0">
+    <div class="users-table-scroll">
+    <table class="table table-hover mb-0 users-table">
         <thead class="table-light">
             <tr>
                 <th>Name</th>
@@ -238,13 +239,13 @@ $allUsers = $allUsersStmt->fetchAll();
         </thead>
         <tbody>
             <?php if (empty($users)): ?>
-                <tr><td colspan="9" class="text-center text-muted py-4">No users found.</td></tr>
+                <tr class="users-empty-row"><td colspan="10" class="text-center text-muted py-4">No users found.</td></tr>
             <?php endif; ?>
             <?php foreach ($users as $u): ?>
                 <tr>
-                    <td><?= htmlspecialchars($u['name']) ?></td>
-                    <td><?= htmlspecialchars($u['email']) ?></td>
-                    <td>
+                    <td data-label="Name"><span class="users-cell-value"><?= htmlspecialchars($u['name']) ?></span></td>
+                    <td data-label="Email"><span class="users-cell-value"><?= htmlspecialchars($u['email']) ?></span></td>
+                    <td data-label="Role">
                         <?php if (currentUser()['role'] === 'super_admin'): ?>
                             <form method="POST">
                                 <?= csrfField() ?>
@@ -260,7 +261,7 @@ $allUsers = $allUsersStmt->fetchAll();
                             <span class="badge bg-secondary"><?= htmlspecialchars($u['role']) ?></span>
                         <?php endif; ?>
                     </td>
-                    <td>
+                    <td data-label="Department">
                         <form method="POST">
                             <?= csrfField() ?>
                             <input type="hidden" name="form_type" value="update_department">
@@ -275,7 +276,7 @@ $allUsers = $allUsersStmt->fetchAll();
                             </select>
                         </form>
                     </td>
-                    <td>
+                    <td data-label="Reporting Manager 1">
                         <form method="POST">
                             <?= csrfField() ?>
                             <input type="hidden" name="form_type" value="update_manager">
@@ -300,7 +301,7 @@ $allUsers = $allUsersStmt->fetchAll();
                             </div>
                         </form>
                     </td>
-                    <td>
+                    <td data-label="Reporting Manager 2">
                         <form method="POST">
                             <?= csrfField() ?>
                             <input type="hidden" name="form_type" value="update_manager">
@@ -325,7 +326,7 @@ $allUsers = $allUsersStmt->fetchAll();
                             </div>
                         </form>
                     </td>
-                    <td>
+                    <td data-label="HOD">
                         <div class="d-flex flex-column gap-1">
                             <span class="badge bg-light text-dark border align-self-start">
                                 <?= htmlspecialchars($u['hod_name'] ?? 'No HOD') ?>
@@ -333,7 +334,7 @@ $allUsers = $allUsersStmt->fetchAll();
                             <a href="settings.php" class="small text-decoration-none">Edit department HOD</a>
                         </div>
                     </td>
-                    <td>
+                    <td data-label="Monitor Mailbox">
                         <?php if (currentUser()['role'] === 'super_admin'): ?>
                             <form method="POST" onsubmit="<?= empty($u['monitor_mailbox']) ? "return confirm('Turn ON live monitoring of {$u['email']}\\'s mailbox? This is REAL - new customer emails will start creating tickets.');" : '' ?>">
                                 <?= csrfField() ?>
@@ -348,7 +349,7 @@ $allUsers = $allUsersStmt->fetchAll();
                             <span class="badge <?= $u['monitor_mailbox'] ? 'bg-success' : 'bg-secondary' ?>"><?= $u['monitor_mailbox'] ? 'LIVE' : 'Off' ?></span>
                         <?php endif; ?>
                     </td>
-                    <td>
+                    <td data-label="Account Status">
                         <form method="POST">
                             <?= csrfField() ?>
                             <input type="hidden" name="form_type" value="set_active">
@@ -364,7 +365,7 @@ $allUsers = $allUsersStmt->fetchAll();
                             <button type="submit" class="btn btn-sm btn-primary" <?= !$u['is_active'] ? 'disabled' : '' ?>>Inactive</button>
                         </form>
                     </td>
-                    <td>
+                    <td data-label="Actions">
                         <form method="POST" onsubmit="return confirm('Delete this user permanently?');">
                             <?= csrfField() ?>
                             <input type="hidden" name="form_type" value="delete_user">
@@ -385,6 +386,7 @@ $allUsers = $allUsersStmt->fetchAll();
             <?php endforeach; ?>
         </tbody>
     </table>
+    </div>
 </div>
 
 <style>

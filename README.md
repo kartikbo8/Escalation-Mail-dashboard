@@ -13,8 +13,14 @@ Email received -> assigned to Employee
               |-- 48h: No reply? -> Third/final escalation to Level 3 (HR + Admin)
                          (final - cc's everyone involved: employee, manager, HOD)
 
-At any point, a GENUINE reply (not an auto-reply/out-of-office) closes the loop
-and marks the ticket 'replied'.
+An employee's genuine reply (not an auto-reply/out-of-office) marks the ticket
+'replied'. A later client reply is classified by AI: a confident confirmation
+that no further action is needed stops reminders; an unresolved or uncertain
+reply reopens the reminder workflow. If AI classification is unavailable, the
+system keeps the reminder workflow active rather than treating the client as
+satisfied. For new tickets, the same AI check applies when a genuine reply
+comes from any address in the original email's To list; CC addresses are
+ignored. Such replies can be detected only in mailboxes enabled for monitoring.
 
 Holidays and non-working days are automatically skipped in every 48/24-hour
 window, so a multi-day festival doesn't eat into anyone's response time.
@@ -57,6 +63,8 @@ escalation-tracker/
    departments, multi-level escalation columns, notification controls, etc).
    The individual `migration_*.sql` files are kept only as a change-history record -
    you do NOT need to run them separately on a fresh database.
+   On an existing database, run `database/migration_15_ticket_to_recipients.sql`
+   to enable AI-checked replies from addresses in new tickets' To lists.
 2. Run `database/seed_admin.php` once (creates admin@example.com / admin123), then delete it
 3. Login -> go to **Users** page -> add your employees, set each one's Reporting Manager
 4. Go to **Settings** -> set each department's HOD (dropdown), review/add keywords, confirm
@@ -69,7 +77,51 @@ To catch up only reminders whose working-time checkpoint is due today, without r
 the escalation stage, run `php cron/check_escalations.php --reminders-only
 --reminder-date=YYYY-MM-DD` from the project root. The date must be today's local date;
 future checkpoints are left for a later run, and a failed Graph send remains eligible
-for retry.
+for retry. A reminder is sent only while the current stage's SLA deadline is still
+ahead; if the checkpoint was missed and the stage deadline has already passed, the
+regular escalation stage advances the ticket instead of sending a stale reminder.
+Regular cron runs consider eligible overdue tickets regardless of their original
+received date. Tickets remain open while the Level 2 manager/HOD window is active so
+a later run can continue to the final Level 3 escalation if still unresolved.
+
+## AI Action Assistant
+
+Signed-in users can open the floating **AI Help** button at the bottom-right of any
+application page to ask about application errors and documented workflows. Chat
+messages are kept in the current session and are not given access to tickets, logs,
+or the database. Do not include email content, credentials, tokens, or personal data.
+If Gemini is unavailable, the assistant provides local troubleshooting guidance for
+common app, login, email, reminder, and escalation issues. The assistant keeps the
+Escalation Tracker context across follow-up questions, so users do not need to repeat
+the application name in each message. Gemini receives a curated, non-sensitive guide
+to the application's features and workflows on each chat request; source files,
+credentials, live ticket data, and email bodies are not sent. Replies should remain
+supportive and non-blaming for employees and administrators in English or Hindi.
+Chat history stays available when navigating between application pages and clears
+when the browser page is refreshed. If the chat is open while navigating, it remains
+open on the next page until the user closes it with the close button or Escape.
+For requests such as "Excel sheet for 1 September", it can provide a date-specific
+daily ticket CSV download that opens in Excel and respects the signed-in user's
+department access.
+
+Admins and Super Admins can also open **AI Action Assistant** from the sidebar to
+request one of three confirmed actions for an explicit ticket number: pause permitted
+notification triggers, alert the department's configured HR/Admin contacts, or send
+the assigned employee a reminder. The floating chat can prepare these same supported
+actions when an Admin or Super Admin clearly asks and includes a ticket number. It
+opens the existing preview page; no email is sent and no ticket setting is changed
+until the authorized user reviews the ticket and explicitly confirms. The assistant
+previews the ticket and recipients, enforces department access for Admins, and records
+executions in the ticket timeline. A manual HR/Admin alert does not advance or reset
+the ticket's automatic escalation stage. Regular users can receive guidance but
+cannot initiate admin-only actions.
+
+The same assistant can prepare an all-time employee report by employee name, without
+requiring a ticket number. Admins see employees in their department; Super Admins can
+select employees across departments. The report includes summary counts and retained
+ticket details and can be downloaded as both an Excel workbook and CSV. Closed tickets
+older than 10 days may already have been removed by the ticket-retention job, so the
+report covers records currently retained by the application.
 
 ## Weekly Department Reports
 

@@ -148,16 +148,30 @@ function isExcludedSubject($subject) {
     return false;
 }
 
+function isEodAcknowledgementContent($subject, $body = '') {
+    $content = (string)$subject . "\n" . (string)$body;
+    $hasEod = preg_match('/\b(?:eod|end\s+of\s+(?:the\s+)?day)\b/i', $content) === 1;
+    $hasAcknowledgement = preg_match(
+        '/\b(?:ack|acknowledg(?:e|ed|es|ing)|acknowledgements?|acknowledgments?)\b/i',
+        $content
+    ) === 1;
+
+    return $hasEod && $hasAcknowledgement;
+}
+
+function normalizeMailBodyText($body, $contentType = '') {
+    $body = (string)$body;
+    if (strcasecmp((string)$contentType, 'html') === 0) {
+        $body = preg_replace('/<[^>]*>/', ' ', $body);
+        $body = strip_tags($body);
+    }
+
+    return html_entity_decode($body, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+}
+
 /**
- * Scan a SUBJECT LINE ONLY against the keyword_categories table and return
- * the highest-priority matching category + the specific keyword matched.
- * Priority order: escalation_trigger > customer_project > ppc_internal.
- * Per HR's matrix, only the SUBJECT is checked (not the body) - a keyword
- * match here marks the ticket "important" and queues it for the escalation
- * flow (Level 1 -> 2 -> 3). No match = stays with the employee, no escalation.
- *
- * Returns ['category' => string, 'keyword' => string] or
- * ['category' => 'normal', 'keyword' => null] if nothing matches.
+ * Scan the subject and full message body against configured keyword categories.
+ * Returns the highest-priority matching category and keyword.
  */
 function isFalsePositiveKeywordSubject($subject) {
     $text = strtolower($subject ?? '');
@@ -177,25 +191,30 @@ function isFalsePositiveKeywordSubject($subject) {
     return false;
 }
 
-function matchTicketKeywords($subject) {
+function matchTicketKeywords($subject, $body = '') {
     $pdo = getDB();
-    $haystack = strtolower($subject ?? '');
+    $content = (string)($subject ?? '') . "\n" . (string)($body ?? '');
+    $haystack = strtolower($content);
 
     if (isFalsePositiveKeywordSubject($subject)) {
         return ['category' => 'normal', 'keyword' => null];
+    }
+
+    if (isEodAcknowledgementContent($subject, $body)) {
+        return ['category' => 'escalation_trigger', 'keyword' => 'EOD + ACKNOWLEDGEMENT'];
     }
 
     // Keep the escalation queue deterministic even when the configured
     // keyword table is empty or a fresh database seed does not carry the
     // trigger row yet. This matches the user's requested urgent escalation
     // path and avoids false positives such as job-opportunity phrasing.
-    if (preg_match('/\b(?:urgent|urgently)\b/i', (string)($subject ?? '')) === 1) {
+    if (preg_match('/\b(?:urgent|urgently)\b/i', $content) === 1) {
         return ['category' => 'escalation_trigger', 'keyword' => 'URGENT'];
     }
 
     // Add requested order-intent phrases the same way the rest of the subject
     // keyword engine understands high-signal customer/project signals.
-    if (preg_match('/\b(?:new\s+order|new\s+order\s+request|new\s+project\s+order|order\s+request|order\s+confirmation)\b/i', (string)($subject ?? '')) === 1) {
+    if (preg_match('/\b(?:new\s+order|new\s+order\s+request|new\s+project\s+order|order\s+request|order\s+confirmation)\b/i', $content) === 1) {
         return ['category' => 'customer_project', 'keyword' => 'NEW ORDER'];
     }
 
@@ -212,7 +231,7 @@ function matchTicketKeywords($subject) {
         // A number immediately after a keyword is allowed for references
         // such as "PO1943909".
         $pattern = '/(?<![\\p{L}\\p{N}])' . preg_quote($needle, '/') . '(?![\\p{L}])/iu';
-        if ($needle !== '' && preg_match($pattern, $subject ?? '') === 1) {
+        if ($needle !== '' && preg_match($pattern, $content) === 1) {
             if (!isset($matches[$row['category']])) {
                 $matches[$row['category']] = $row['keyword'];
             }

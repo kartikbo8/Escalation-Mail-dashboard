@@ -111,7 +111,7 @@ $dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturd
 $keywordCategoryLabels = [
     'customer_project'   => 'Customer/Project (High Priority)',
     'ppc_internal'       => 'PPC/Internal',
-    'escalation_trigger' => 'Escalation Trigger Words',
+    'escalation_trigger' => 'Escalation Paused',
 ];
 ?>
 

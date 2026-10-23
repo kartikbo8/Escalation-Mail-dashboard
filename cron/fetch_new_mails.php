@@ -9,7 +9,8 @@
  * New conversationId -> create a ticket (status=open), tagged by keyword match.
  * Reply from the mailbox owner on an OPEN ticket -> mark 'replied' -- BUT ONLY
  * if it's a genuine reply, not an auto-reply (out-of-office / security
- * auto-response). Auto-replies are logged but do NOT change ticket status.
+ * auto-response). Client replies are AI-classified: confirmed resolution stops
+ * reminders; unresolved replies reopen the reminder workflow.
  */
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/functions.php';
@@ -98,6 +99,22 @@ function findExistingTicketForIncomingMail($pdo, $senderEmail, $subject, $receiv
     return $select->fetch();
 }
 
+function ticketHasToRecipient($ticket, $email) {
+    $email = strtolower(trim((string)$email));
+    $recipients = json_decode((string)($ticket['to_recipients_json'] ?? ''), true);
+    if ($email === '' || !is_array($recipients)) {
+        return false;
+    }
+
+    foreach ($recipients as $recipient) {
+        if (is_string($recipient) && strtolower(trim($recipient)) === $email) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // Automatically fetch an app-only access token (requires Application
 // permissions + admin consent in Azure - see README). Falls back to a
 // manually-set env var if you're still testing with delegated permissions.
@@ -122,6 +139,13 @@ function processMailbox($pdo, $accessToken, $mailbox, $departmentId, $ownerUserI
     foreach ($messages as $msg) {
         $conversationId = $msg['conversationId'];
         $senderEmail    = $msg['from']['emailAddress']['address'] ?? '';
+        $toRecipients = [];
+        foreach (($msg['toRecipients'] ?? []) as $toRecipient) {
+            $email = trim((string)($toRecipient['emailAddress']['address'] ?? ''));
+            if ($email !== '') {
+                $toRecipients[strtolower($email)] = $email;
+            }
+        }
         $subject        = $msg['subject'] ?? '(no subject)';
         $bodyPreview    = $msg['bodyPreview'] ?? '';
         $receivedAt     = date('Y-m-d H:i:s', strtotime($msg['receivedDateTime']));
@@ -141,15 +165,34 @@ function processMailbox($pdo, $accessToken, $mailbox, $departmentId, $ownerUserI
             $conversationId,
             $msg['id'] ?? ''
         );
+        $isTrackedToReply = $ticket
+            && ticketHasToRecipient($ticket, $senderEmail)
+            && $receivedAt > $ticket['received_at']
+            && ($ticket['replied_at'] === null || $receivedAt > $ticket['replied_at']);
 
         if (!$ticket && !$isOurReply) {
             if (isExcludedSubject($subject)) {
                 continue;
             }
 
-            // New incoming email -> configured subject keywords take priority over AI.
-            // Current policy: employee reminder at 1 hour, manager escalation at 2 hours.
-            $slaDue = calculateSlaDueDate($receivedAt, $departmentId, $senderEmail);
+            $fullMessage = !empty($msg['id'])
+                ? graphGetMessageBody($accessToken, $mailbox, $msg['id'])
+                : null;
+            $bodyContent = $bodyPreview;
+            $bodyFetchNote = '';
+            if (isset($fullMessage['body']['content'])) {
+                $bodyContent = normalizeMailBodyText(
+                    $fullMessage['body']['content'],
+                    $fullMessage['body']['contentType'] ?? ''
+                );
+            } else {
+                $bodyFetchError = $fullMessage['error']['message'] ?? 'message body was empty or unavailable';
+                $messageId = $msg['id'] ?? '(missing id)';
+                error_log("Could not load full email body for {$mailbox} message {$messageId}: {$bodyFetchError}; keyword scan is limited to body preview.");
+                $bodyFetchNote = ' (full message body unavailable; keyword scan used body preview)';
+            }
+
+            // New incoming email -> configured keywords are checked in subject and full body before AI.
                         $senderUserStmt = $pdo->prepare(
                                 "SELECT id FROM users
                                  WHERE is_active = 1 AND department_id IS NOT NULL
@@ -161,7 +204,7 @@ function processMailbox($pdo, $accessToken, $mailbox, $departmentId, $ownerUserI
                         $assignedUserId = $senderUserId ? (int)$senderUserId : $ownerUserId;
             $keywordMatch = isExcludedSubject($subject)
                 ? ['category' => 'normal', 'keyword' => null]
-                : matchTicketKeywords($subject);
+                : matchTicketKeywords($subject, $bodyContent);
 
             if (isIgnoredSender($senderEmail)) {
                 $keywordMatch = ['category' => 'normal', 'keyword' => null];
@@ -175,15 +218,22 @@ function processMailbox($pdo, $accessToken, $mailbox, $departmentId, $ownerUserI
                 }
             }
             $isImportant = ($keywordMatch['category'] !== 'normal') ? 1 : 0;
+            $slaDue = calculateSlaDueDate(
+                $receivedAt,
+                $departmentId,
+                $senderEmail,
+                $keywordMatch['keyword']
+            );
+            $toRecipientsJson = json_encode(array_values($toRecipients));
 
             $insert = $pdo->prepare(
-                "INSERT INTO tickets (department_id, subject, sender_email, conversation_id,
+                "INSERT INTO tickets (department_id, subject, sender_email, to_recipients_json, conversation_id,
                  graph_message_id, source_mailbox, status, priority_tag, matched_keyword, is_important, escalation_queued,
                  assigned_to, received_at, stage_started_at, sla_due_at)
-                 VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)"
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)"
             );
             $insert->execute([
-                $departmentId, $subject, $senderEmail, $conversationId,
+                $departmentId, $subject, $senderEmail, $toRecipientsJson, $conversationId,
                 $msg['id'], $mailbox, $keywordMatch['category'], $keywordMatch['keyword'], $isImportant, $isImportant,
                 $assignedUserId, $receivedAt, $receivedAt, $slaDue,
             ]);
@@ -194,16 +244,18 @@ function processMailbox($pdo, $accessToken, $mailbox, $departmentId, $ownerUserI
             logTimelineEvent($newTicketId, 'received', 'Email received from ' . $senderEmail . $assignNote .
                 ($keywordMatch['keyword']
                     ? " (matched keyword: {$keywordMatch['keyword']} - IMPORTANT, queued for escalation)"
-                    : " (no keyword matched - will not escalate beyond employee)"));
+                    : " (no keyword matched - will not escalate beyond employee)") . $bodyFetchNote);
             $created++;
 
         } elseif (
             $ticket
             && $isOurReply
+            && !$isTrackedToReply
             && (
                 in_array($ticket['status'], ['open', 'escalated'], true)
                 || ($ticket['status'] === 'closed' && (int)$ticket['escalation_level'] > 0)
             )
+            && ($ticket['replied_at'] === null || $receivedAt > $ticket['replied_at'])
         ) {
             if ($isAuto) {
                 logTimelineEvent($ticket['id'], 'no_reply_warning',
@@ -214,6 +266,113 @@ function processMailbox($pdo, $accessToken, $mailbox, $departmentId, $ownerUserI
                 logTimelineEvent($ticket['id'], 'replied', 'Reply sent by mailbox owner');
                 $repliedCount++;
             }
+        } elseif (
+            $ticket
+            && (
+                $isTrackedToReply
+                || (!$isOurReply
+                    && strcasecmp(trim($senderEmail), trim($ticket['sender_email'])) === 0)
+            )
+            && $receivedAt > $ticket['received_at']
+            && ($ticket['replied_at'] === null || $receivedAt > $ticket['replied_at'])
+        ) {
+            if ($isAuto) {
+                logTimelineEvent($ticket['id'], 'no_reply_warning',
+                    'Client auto-reply detected - not used to stop or restart reminders');
+                continue;
+            }
+
+            $clientReplyBody = $bodyPreview;
+            $messageId = $msg['id'] ?? null;
+            $fullMessage = $messageId
+                ? graphGetMessageBody($accessToken, $mailbox, $messageId)
+                : null;
+            if (isset($fullMessage['body']['content'])) {
+                $clientReplyBody = normalizeMailBodyText(
+                    $fullMessage['body']['content'],
+                    $fullMessage['body']['contentType'] ?? ''
+                );
+                $clientReplyBody = substr($clientReplyBody, 0, 10000);
+            } else {
+                error_log(
+                    "Could not load full client reply body for ticket {$ticket['id']}; using body preview."
+                );
+            }
+
+            $clientReply = classifyClientReplyWithAI($subject, $clientReplyBody);
+            $responseSenderType = strcasecmp(trim($senderEmail), trim($ticket['sender_email'])) === 0
+                ? 'client'
+                : 'original To recipient';
+            if ($clientReply && $clientReply['satisfied'] && $clientReply['confidence'] >= 0.80) {
+                $pdo->prepare(
+                    "UPDATE tickets SET status='replied', replied_at=?, closed_at=NULL WHERE id=?"
+                )->execute([$receivedAt, $ticket['id']]);
+                logTimelineEvent(
+                    $ticket['id'],
+                    'replied',
+                    ucfirst($responseSenderType) . ' reply classified as resolved by AI; reminders stopped'
+                );
+                $repliedCount++;
+                continue;
+            }
+
+            $keywordMatch = matchTicketKeywords($subject, $clientReplyBody);
+            $isImportant = !empty($ticket['is_important']) || $keywordMatch['category'] !== 'normal';
+            $isQueued = !empty($ticket['escalation_queued']) || $keywordMatch['category'] !== 'normal';
+            $priorityTag = $keywordMatch['category'] !== 'normal' ? $keywordMatch['category'] : $ticket['priority_tag'];
+            $matchedKeyword = $keywordMatch['keyword'] ?: $ticket['matched_keyword'];
+            $wasAlreadyActive = $ticket['status'] === 'open';
+
+            if ($wasAlreadyActive) {
+                $pdo->prepare(
+                    "UPDATE tickets
+                     SET replied_at=?, is_important=?, escalation_queued=?, priority_tag=?, matched_keyword=?
+                     WHERE id=?"
+                )->execute([
+                    $receivedAt,
+                    $isImportant ? 1 : 0,
+                    $isQueued ? 1 : 0,
+                    $priorityTag,
+                    $matchedKeyword,
+                    $ticket['id'],
+                ]);
+            } else {
+                $slaDue = calculateSlaDueDate(
+                    $receivedAt,
+                    $ticket['department_id'],
+                    $ticket['sender_email'],
+                    $matchedKeyword
+                );
+                $pdo->prepare(
+                    "UPDATE tickets
+                     SET status='open', escalation_level=0, stage_started_at=?, sla_due_at=?,
+                         reminder_sent_at=NULL, snoozed_until=NULL, replied_at=?, closed_at=NULL,
+                         is_important=?, escalation_queued=?, priority_tag=?, matched_keyword=?
+                     WHERE id=?"
+                )->execute([
+                    $receivedAt,
+                    $slaDue,
+                    $receivedAt,
+                    $isImportant ? 1 : 0,
+                    $isQueued ? 1 : 0,
+                    $priorityTag,
+                    $matchedKeyword,
+                    $ticket['id'],
+                ]);
+            }
+
+            $classificationNote = !$clientReply
+                ? 'AI reply classification unavailable'
+                : ($clientReply['confidence'] < 0.80
+                    ? 'AI reply classification uncertain'
+                    : 'AI classified client reply as unresolved');
+            logTimelineEvent(
+                $ticket['id'],
+                $wasAlreadyActive ? 'no_reply_warning' : 'reopened',
+                $wasAlreadyActive
+                    ? "{$classificationNote} ({$responseSenderType}); existing reminder schedule remains active"
+                    : "{$classificationNote} ({$responseSenderType}); reminder workflow restarted"
+            );
         }
     }
 

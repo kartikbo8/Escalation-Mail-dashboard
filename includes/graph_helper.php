@@ -189,7 +189,8 @@ function graphGetMessages($accessToken, $mailbox = 'me', $top = 200, $maxResults
     }
     $filter = urlencode($filterExpression);
     
-    $endpoint = $baseEndpoint . "?\$top={$top}&\$orderby={$orderBy}&\$filter={$filter}";
+    $select = urlencode('id,conversationId,from,toRecipients,subject,bodyPreview,receivedDateTime');
+    $endpoint = $baseEndpoint . "?\$top={$top}&\$orderby={$orderBy}&\$filter={$filter}&\$select={$select}";
 
     while ($endpoint && count($messages) < $maxResults) {
         $isFullUrl = strpos($endpoint, 'https://') === 0;

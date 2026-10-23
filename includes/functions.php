@@ -98,17 +98,27 @@ function getSlaHours($departmentId, $senderEmail = null) {
 
 /**
  * Final SLA deadline for the active escalation stage.
- * External mails get 24 working hours; Design/PPC use 2; other internal mails stay at 3.
+ * EOD + acknowledgement mails get 4 working hours so their reminder can go
+ * after 2 hours; other mails follow the configured department/sender SLA.
  */
-function calculateSlaDueDate($startDateTime, $departmentId, $senderEmail = null) {
+function calculateSlaDueDate($startDateTime, $departmentId, $senderEmail = null, $matchedKeyword = null) {
+    if (strcasecmp(trim((string)$matchedKeyword), 'EOD + ACKNOWLEDGEMENT') === 0) {
+        return calculateDueDateByHours($startDateTime, 4);
+    }
+
     return calculateDueDateByHours($startDateTime, getSlaHours($departmentId, $senderEmail));
 }
 
 /**
  * Reminder checkpoint for the active escalation stage.
- * External mails use 12 hours, Design/PPC use 1 hour, others stay at 1.5 hours.
+ * EOD + acknowledgement mails get a 2-hour checkpoint; other mails follow
+ * the existing sender/department reminder schedule.
  */
-function calculateReminderDueDate($startDateTime, $departmentId, $senderEmail = null) {
+function calculateReminderDueDate($startDateTime, $departmentId, $senderEmail = null, $matchedKeyword = null) {
+    if (strcasecmp(trim((string)$matchedKeyword), 'EOD + ACKNOWLEDGEMENT') === 0) {
+        return calculateDueDateByHours($startDateTime, 2);
+    }
+
     if (isExternalSenderEmail($senderEmail)) {
         $hours = 12;
     } else {
@@ -142,7 +152,7 @@ function priorityBadge($tag) {
     $map = [
         'customer_project'   => ['bg-danger',  'Customer/Project'],
         'ppc_internal'       => ['bg-warning text-dark', 'PPC/Internal'],
-        'escalation_trigger' => ['bg-dark',     'Escalation Trigger'],
+        'escalation_trigger' => ['bg-dark',     'Escalation Paused'],
         'normal'             => ['bg-light text-dark border', 'Normal'],
     ];
     [$color, $label] = $map[$tag] ?? $map['normal'];

@@ -156,6 +156,8 @@ if ($deptFilter !== '') {
 if ($statusFilter !== '') {
     $sql .= " AND t.status = ?";
     $params[] = $statusFilter;
+} else {
+    $sql .= " AND t.status <> 'closed'";
 }
 
 
@@ -195,8 +197,12 @@ $stmt->execute($params);
 $tickets = $stmt->fetchAll();
 
 $departments = getDepartments();
-if (portalDepartmentId() !== null) {
-    $departments = array_values(array_filter($departments, static fn($department) => (int)$department['id'] === portalDepartmentId()));
+$portalDepartmentIds = portalDepartmentIds();
+if ($portalDepartmentIds !== null) {
+    $departments = array_values(array_filter(
+        $departments,
+        static fn($department) => in_array((int)$department['id'], $portalDepartmentIds, true)
+    ));
 }
 
 ?>
