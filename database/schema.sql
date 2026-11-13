@@ -31,12 +31,17 @@ CREATE TABLE users (
     name VARCHAR(150) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
+    password_set TINYINT(1) NOT NULL DEFAULT 0,
+    activation_token_hash CHAR(64) DEFAULT NULL,
+    activation_expires_at DATETIME DEFAULT NULL,
+    auth_version INT UNSIGNED NOT NULL DEFAULT 0,
     role ENUM('super_admin', 'admin', 'user') NOT NULL DEFAULT 'user',
     department_id INT DEFAULT NULL,
     reporting_manager_id INT DEFAULT NULL,      -- primary manager / Level 2 recipient
     reporting_manager_2_id INT DEFAULT NULL,    -- secondary manager / optional Level 2 recipient
     is_active TINYINT(1) DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_users_activation_token_hash (activation_token_hash),
     FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL,
     FOREIGN KEY (reporting_manager_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (reporting_manager_2_id) REFERENCES users(id) ON DELETE SET NULL
@@ -92,6 +97,18 @@ CREATE TABLE escalation_contacts (
     department_id INT DEFAULT NULL,   -- NULL = applies to all departments
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
+);
+
+-- Group / distribution-list addresses: ticket owner + manager for Level 1 reminders
+CREATE TABLE group_mailboxes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    owner_user_id INT NOT NULL,
+    manager_user_id INT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_group_mailboxes_email (email),
+    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (manager_user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
 INSERT INTO escalation_contacts (role_type, name, email, department_id) VALUES

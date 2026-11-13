@@ -4,6 +4,7 @@ requireRole(['admin', 'super_admin']);
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/graph_helper.php';
 require_once __DIR__ . '/../includes/ai_helper.php';
+require_once __DIR__ . '/../includes/keyword_helper.php';
 
 $pdo = getDB();
 $user = currentUser();
@@ -138,6 +139,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } elseif ($parsed['action'] === 'send_reminder'
                     && ($ticket['status'] !== 'open' || empty($ticket['assignee_email']))) {
                     $error = 'A reminder requires an open ticket with an assigned employee.';
+                } elseif ($parsed['action'] === 'send_reminder'
+                    && isIgnoredSender($ticket['sender_email'])) {
+                    $error = 'Reminders are disabled for Naukri.com emails because they are treated as normal mail.';
                 } else {
                     $pendingAction = [
                         'action' => $parsed['action'],
@@ -201,6 +205,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } elseif ($action === 'send_reminder') {
                     if ($ticket['status'] !== 'open' || empty($ticket['assignee_email'])) {
                         $error = 'A reminder can only be sent for an open ticket with an assigned employee.';
+                    } elseif (isIgnoredSender($ticket['sender_email'])) {
+                        $error = 'Reminders are disabled for Naukri.com emails because they are treated as normal mail.';
                     } elseif (strtolower(trim($ticket['assignee_email'])) !== ($pending['assignee_email'] ?? '')) {
                         $error = 'The assigned employee changed after preview. Review the ticket and submit the command again.';
                     } else {

@@ -1,4 +1,9 @@
 <?php
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
+
 /**
  * Send last week's department-scoped reports to managers and the full workbook
  * to the configured HR/Admin escalation contacts. Schedule for Monday 10:00 AM.
@@ -141,12 +146,12 @@ try {
     } else {
         echo "{$sentCount} report(s) sent; {$skippedCount} already sent; {$failedCount} failed.\n";
     }
-    $pdo->query("SELECT RELEASE_LOCK('escalation_tracker_weekly_reports')");
+    executePreparedQuery($pdo, "SELECT RELEASE_LOCK('escalation_tracker_weekly_reports')");
     exit($failedCount > 0 ? 1 : 0);
 } catch (Throwable $exception) {
     fwrite(STDERR, "Weekly reports failed: {$exception->getMessage()}\n");
     if (isset($pdo) && $pdo instanceof PDO) {
-        $pdo->query("SELECT RELEASE_LOCK('escalation_tracker_weekly_reports')");
+        executePreparedQuery($pdo, "SELECT RELEASE_LOCK('escalation_tracker_weekly_reports')");
     }
     exit(1);
 }

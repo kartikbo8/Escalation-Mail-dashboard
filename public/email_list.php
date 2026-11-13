@@ -41,78 +41,68 @@ if (
 
     $action = $_POST['action'];
 
-    if (
-        $selectedIds
-        && in_array(currentUser()['role'], ['admin', 'super_admin'], true)
-    ) {
+    if ($selectedIds && in_array(currentUser()['role'], ['admin', 'super_admin'], true)) {
         $placeholders = implode(',', array_fill(0, count($selectedIds), '?'));
-
-        if ($action === 'stop_selected_triggers') {
-
-            $columns = currentUser()['role'] === 'super_admin'
-                ? 'stop_employee_notifications = 1, stop_manager_notifications = 1'
-                : 'stop_employee_notifications = 1';
-
-            $stmt = $pdo->prepare(
-                "UPDATE tickets
-                 SET {$columns}
-                                 WHERE id IN ({$placeholders})
-                                     AND " . portalTicketCondition('tickets')
-            );
-
-            $stmt->execute($selectedIds);
-
-            $message = count($selectedIds) . ' selected trigger(s) stopped.';
-
-        } elseif ($action === 'close_selected') {
-
-            $stmt = $pdo->prepare(
-                "UPDATE tickets
-                 SET status = 'closed',
-                     closed_at = NOW()
-                 WHERE id IN ({$placeholders})
-                                     AND " . portalTicketCondition('tickets') . "
-                   AND status <> 'closed'"
-            );
-
-            $stmt->execute($selectedIds);
-
-            foreach ($selectedIds as $ticketId) {
-                logTimelineEvent(
-                    $ticketId,
-                    'closed',
-                    'Closed in bulk from Email List',
-                    currentUser()['id']
+        $accessCheck = $pdo->prepare(
+            "SELECT id FROM tickets
+             WHERE id IN ({$placeholders}) AND " . portalTicketCondition('tickets')
+        );
+        $accessCheck->execute($selectedIds);
+        $selectedIds = array_map('intval', $accessCheck->fetchAll(PDO::FETCH_COLUMN));
+        if (!$selectedIds) {
+            $message = 'No selected email is available in your department.';
+        } else {
+            $placeholders = implode(',', array_fill(0, count($selectedIds), '?'));
+            if ($action === 'stop_selected_triggers') {
+                $columns = currentUser()['role'] === 'super_admin'
+                    ? 'stop_employee_notifications = 1, stop_manager_notifications = 1'
+                    : 'stop_employee_notifications = 1';
+                $stmt = $pdo->prepare(
+                    "UPDATE tickets
+                     SET {$columns}
+                     WHERE id IN ({$placeholders})
+                       AND " . portalTicketCondition('tickets')
                 );
-            }
-
-            $message = count($selectedIds) . ' selected ticket(s) closed.';
-
-        } elseif ($action === 'reopen_selected') {
-
-            $stmt = $pdo->prepare(
-                "UPDATE tickets
-                 SET status = 'open',
-                     closed_at = NULL
-                 WHERE id IN ({$placeholders})
-                                     AND " . portalTicketCondition('tickets') . "
-                   AND status = 'closed'"
-            );
-
-            $stmt->execute($selectedIds);
-
-            foreach ($selectedIds as $ticketId) {
-                logTimelineEvent(
-                    $ticketId,
-                    'reopened',
-                    'Reopened in bulk from Email List',
-                    currentUser()['id']
+                $stmt->execute($selectedIds);
+                $message = count($selectedIds) . ' selected trigger(s) stopped.';
+            } elseif ($action === 'close_selected') {
+                $stmt = $pdo->prepare(
+                    "UPDATE tickets
+                     SET status = 'closed', closed_at = NOW()
+                     WHERE id IN ({$placeholders})
+                       AND " . portalTicketCondition('tickets') . "
+                       AND status <> 'closed'"
                 );
+                $stmt->execute($selectedIds);
+                foreach ($selectedIds as $ticketId) {
+                    logTimelineEvent(
+                        $ticketId,
+                        'closed',
+                        'Closed in bulk from Email List',
+                        currentUser()['id']
+                    );
+                }
+                $message = count($selectedIds) . ' selected ticket(s) closed.';
+            } elseif ($action === 'reopen_selected') {
+                $stmt = $pdo->prepare(
+                    "UPDATE tickets
+                     SET status = 'open', closed_at = NULL
+                     WHERE id IN ({$placeholders})
+                       AND " . portalTicketCondition('tickets') . "
+                       AND status = 'closed'"
+                );
+                $stmt->execute($selectedIds);
+                foreach ($selectedIds as $ticketId) {
+                    logTimelineEvent(
+                        $ticketId,
+                        'reopened',
+                        'Reopened in bulk from Email List',
+                        currentUser()['id']
+                    );
+                }
+                $message = count($selectedIds) . ' selected ticket(s) reopened.';
             }
-
-            $message = count($selectedIds) . ' selected ticket(s) reopened.';
         }
-
     } else {
         $message = 'Please select at least one email.';
     }
@@ -125,7 +115,14 @@ if (
 
 $sql = "SELECT
             t.*,
-            d.name AS department_name
+            d.name AS department_name,
+            -- Employee asked to close (no reply needed) and nobody has closed, reopened or replied since.
+            (t.status IN ('open', 'escalated')
+             AND COALESCE((SELECT MAX(ev.id) FROM timeline_events ev
+                           WHERE ev.ticket_id = t.id AND ev.note LIKE 'Close requested by %'), 0)
+               > COALESCE((SELECT MAX(ev.id) FROM timeline_events ev
+                           WHERE ev.ticket_id = t.id AND ev.event_type IN ('closed', 'reopened', 'replied')), 0)
+            ) AS close_requested
         FROM tickets t
         LEFT JOIN departments d
             ON d.id = t.department_id
@@ -134,9 +131,8 @@ $sql = "SELECT
     $sql .= " AND t.is_important = 1";
 
 $params = [];
-$retentionCutoff = (new DateTimeImmutable('now'))->modify('-30 days');
 $sql .= " AND (t.received_at >= ? OR t.status IN ('open', 'escalated'))";
-$params[] = $retentionCutoff->format('Y-m-d H:i:s');
+$params[] = dataWindowStart();
 
 
 /* ---------------------------------------------------------
@@ -213,7 +209,7 @@ if ($portalDepartmentIds !== null) {
 
         <div class="text-muted small">
             <?= count($tickets) ?> keyword-matched email(s) found
-            · Last 30 days · Keyword-matched emails only
+            · Last <?= DATA_WINDOW_DAYS ?> days · Keyword-matched emails only
         </div>
     </div>
 </div>
@@ -457,6 +453,12 @@ if ($portalDepartmentIds !== null) {
 
                             <?php endif; ?>
 
+                            <?php if (!empty($t['close_requested'])): ?>
+                                <span class="badge bg-warning text-dark mt-1" title="An employee asked to close this - no reply needed">
+                                    Close requested
+                                </span>
+                            <?php endif; ?>
+
                         </td>
 
 
@@ -486,9 +488,14 @@ if ($portalDepartmentIds !== null) {
 
                         <td>
 
-                            <?= priorityBadge(
-                                $t['priority_tag'] ?? 'normal'
-                            ) ?>
+                            <?php if (($t['priority_tag'] ?? 'normal') === 'customer_project'): ?>
+                                <span class="email-priority-pill email-priority-pill--customer-project">
+                                    <span class="email-priority-pill-label">Customer / Project</span>
+                                    <span class="email-priority-pill-note">Priority mail</span>
+                                </span>
+                            <?php else: ?>
+                                <?= priorityBadge($t['priority_tag'] ?? 'normal', $t['matched_keyword'] ?? null) ?>
+                            <?php endif; ?>
 
                         </td>
 
@@ -542,8 +549,9 @@ if ($portalDepartmentIds !== null) {
     </div>
 
 
-    <!-- Bulk actions -->
+    <!-- Bulk actions (Manager/Admin only; employees request closure per ticket) -->
 
+    <?php if (in_array(currentUser()['role'], ['admin', 'super_admin'], true)): ?>
     <div
         class="p-3 border-top d-flex justify-content-end flex-wrap gap-2"
     >
@@ -581,6 +589,7 @@ if ($portalDepartmentIds !== null) {
         </button>
 
     </div>
+    <?php endif; ?>
 
 </form>
 

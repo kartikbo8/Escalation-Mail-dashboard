@@ -9,7 +9,8 @@
  * Usage: http://localhost:8080/escalation-tracker/public/test_graph_connection.php?mailbox=sales@afcindia.in
  */
 require_once __DIR__ . '/../includes/auth.php';
-requireRole(['super_admin', 'admin']);
+// Can read any mailbox in the tenant (?mailbox=...), so Super Admin only.
+requireRole(['super_admin']);
 require_once __DIR__ . '/../includes/graph_helper.php';
 
 header('Content-Type: text/plain');

@@ -5,10 +5,14 @@
 require_once __DIR__ . '/../config/db.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
     session_set_cookie_params([
         'httponly' => true,
-        'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+        'secure' => strtolower((string)getenv('APP_ENV')) === 'production'
+            || (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
         'samesite' => 'Lax',
+        'path' => '/',
     ]);
     session_start();
 }
@@ -32,13 +36,13 @@ function csrfField() {
 }
 
 function requireCsrfToken() {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        http_response_code(405);
+        header('Allow: POST');
+        exit('Method not allowed.');
+    }
     $submitted = $_POST['csrf_token'] ?? '';
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-    $referer = $_SERVER['HTTP_REFERER'] ?? '';
-    $sameOrigin = ($origin !== '' && parse_url($origin, PHP_URL_HOST) === ($_SERVER['HTTP_HOST'] ?? ''))
-        || ($referer !== '' && parse_url($referer, PHP_URL_HOST) === ($_SERVER['HTTP_HOST'] ?? ''));
-
-    if ((!$submitted || !hash_equals(csrfToken(), $submitted)) && !$sameOrigin) {
+    if (!is_string($submitted) || $submitted === '' || !hash_equals(csrfToken(), $submitted)) {
         http_response_code(403);
         exit('Invalid security token. Please reload the page and try again.');
     }
@@ -53,12 +57,43 @@ function requireLogin() {
         header('Location: login.php');
         exit;
     }
+
+    $userId = filter_var($_SESSION['user_id'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    if ($userId === false) {
+        doLogout();
+        header('Location: login.php');
+        exit;
+    }
+
+    $stmt = getDB()->prepare(
+        "SELECT id, name, email, role, department_id, is_active, password_set, auth_version
+         FROM users WHERE id = ? LIMIT 1"
+    );
+    $stmt->execute([$userId]);
+    $user = $stmt->fetch();
+    if (!$user
+        || (int)$user['is_active'] !== 1
+        || (int)$user['password_set'] !== 1
+        || (int)($_SESSION['auth_version'] ?? -1) !== (int)$user['auth_version']
+        || !in_array($user['role'], ['user', 'admin', 'super_admin'], true)) {
+        doLogout();
+        header('Location: login.php');
+        exit;
+    }
+
+    $_SESSION['user_id'] = (int)$user['id'];
+    $_SESSION['name'] = $user['name'];
+    $_SESSION['email'] = $user['email'];
+    $_SESSION['role'] = $user['role'];
+    $_SESSION['department_id'] = $user['department_id'] === null ? null : (int)$user['department_id'];
+    $_SESSION['auth_version'] = (int)$user['auth_version'];
 }
 
 function requireRole($roles) {
     requireLogin();
     if (!in_array($_SESSION['role'], (array)$roles)) {
-        die('Access denied. You do not have permission to view this page.');
+        http_response_code(403);
+        exit('Access denied. You do not have permission to view this page.');
     }
 }
 
@@ -99,7 +134,7 @@ function setPortalDepartment($departmentSlug) {
     }
 
     if (($_SESSION['role'] ?? '') !== 'super_admin'
-        && (int)($_SESSION['department_id'] ?? 0) !== (int)$department['id']) {
+        && !in_array((int)$department['id'], portalDepartmentIds(), true)) {
         http_response_code(403);
         exit('You do not have access to this department portal.');
     }
@@ -163,6 +198,14 @@ function portalDepartmentName() {
 }
 
 function portalTicketCondition($alias = 't') {
+    if (($_SESSION['role'] ?? '') === 'user') {
+        // Employees see mails assigned to them and mails where they are in To
+        // (an external mail to two people is one ticket; both see its status).
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        return "({$alias}.assigned_to = {$userId}"
+            . " OR LOWER(COALESCE({$alias}.to_recipients_json, '')) LIKE"
+            . " CONCAT('%\"', (SELECT LOWER(email) FROM users WHERE id = {$userId}), '\"%'))";
+    }
     $departmentIds = portalDepartmentIds();
     if ($departmentIds === null) {
         return '1=1';
@@ -184,87 +227,146 @@ function portalDepartmentCondition($alias = 'd') {
     return $alias . '.id IN (' . implode(',', $departmentIds) . ')';
 }
 
+function portalUserCondition($alias = 'u') {
+    if (($_SESSION['role'] ?? '') === 'super_admin') {
+        return '1=1';
+    }
+    $departmentIds = portalDepartmentIds();
+    if (!$departmentIds) {
+        return '1=0';
+    }
+    return $alias . '.department_id IN (' . implode(',', array_map('intval', $departmentIds)) . ')';
+}
+
 function portalUrl($path) {
     $departmentId = portalDepartmentId();
     return $departmentId === null ? $path : $path . (str_contains($path, '?') ? '&' : '?') . 'portal=department';
 }
 
 function attemptLogin($email, $password) {
+    if (!is_string($email) || !is_string($password) || strlen($email) > 255 || strlen($password) > 1024) {
+        return false;
+    }
     $pdo = getDB();
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? AND is_active = 1");
+    $stmt = $pdo->prepare(
+        "SELECT id, name, email, role, department_id, password_hash, password_set, auth_version
+         FROM users WHERE email = ? AND is_active = 1 LIMIT 1"
+    );
     $stmt->execute([$email]);
     $user = $stmt->fetch();
 
-    if ($user && password_verify($password, $user['password_hash'])) {
+    if ($user
+        && in_array($user['role'], ['user', 'admin', 'super_admin'], true)
+        && (int)$user['password_set'] === 1
+        && password_verify($password, $user['password_hash'])) {
         session_regenerate_id(true);
+        unset($_SESSION['csrf_token']);
         $_SESSION['user_id']       = $user['id'];
         $_SESSION['name']          = $user['name'];
         $_SESSION['email']         = $user['email'];
         $_SESSION['role']          = $user['role'];
         $_SESSION['department_id'] = $user['department_id'];
+        $_SESSION['auth_version']  = (int)$user['auth_version'];
         return true;
     }
     return false;
 }
 
 /**
- * Look up an account by email that still needs to self-set its first
- * password (password_set = 0) - e.g. an employee synced in from
- * Microsoft 365 who has never logged in here before.
- *
- * IMPORTANT: only plain 'user' accounts are eligible for self-service.
- * An 'admin' or 'super_admin' account that has never had its password
- * set must be activated by an existing Super Admin (via the password
- * reset button on the Users page) - otherwise anyone who knows that
- * email could claim an admin-level account before the real person does.
+ * Issue a single-use, expiring password setup token for an account that was
+ * provisioned by an administrator or the CLI seed tool. Share it out of band.
  */
-function findAccountNeedingFirstPassword($email) {
-    $pdo = getDB();
-    $stmt = $pdo->prepare(
-        "SELECT id, name, email FROM users WHERE email = ? AND is_active = 1 AND password_set = 0 AND role = 'user'"
+function createAccountActivationToken($userId, $ttlSeconds = 86400) {
+    $token = bin2hex(random_bytes(32));
+    $expiresAt = gmdate('Y-m-d H:i:s', time() + max(300, (int)$ttlSeconds));
+    $stmt = getDB()->prepare(
+        "UPDATE users
+         SET activation_token_hash = ?, activation_expires_at = ?
+         WHERE id = ? AND is_active = 1 AND password_set = 0"
     );
-    $stmt->execute([$email]);
-    return $stmt->fetch() ?: null;
+    $stmt->execute([hash('sha256', $token), $expiresAt, (int)$userId]);
+    return $stmt->rowCount() === 1 ? $token : null;
 }
 
 /**
- * Detect an admin/super_admin account that exists but hasn't been
- * activated yet (password_set = 0) - used only to show a clear message,
- * never to let them self-serve a password.
+ * Require a high-entropy user-chosen password for first activation/reset.
  */
-function findUnactivatedPrivilegedAccount($email) {
-    $pdo = getDB();
-    $stmt = $pdo->prepare(
-        "SELECT id FROM users WHERE email = ? AND is_active = 1 AND password_set = 0 AND role IN ('admin','super_admin')"
-    );
-    $stmt->execute([$email]);
-    return $stmt->fetch() ? true : false;
+function isStrongPassword($password) {
+    return is_string($password)
+        && strlen($password) >= 12
+        && strlen($password) <= 1024
+        && preg_match('/[a-z]/', $password)
+        && preg_match('/[A-Z]/', $password)
+        && preg_match('/[0-9]/', $password);
 }
 
 /**
- * Set a first-time password for an account and log them straight in.
- * Only call this after findAccountNeedingFirstPassword() confirmed the
- * account is eligible.
+ * Consume a setup token atomically and log in the verified account.
  */
-function setFirstPasswordAndLogin($userId, $newPassword) {
+function activateAccountWithToken($token, $newPassword) {
+    if (!is_string($token) || !preg_match('/^[a-f0-9]{64}$/i', $token) || !isStrongPassword($newPassword)) {
+        return false;
+    }
+    $token = strtolower($token);
+
     $pdo = getDB();
     $hash = password_hash($newPassword, PASSWORD_DEFAULT);
-    $pdo->prepare("UPDATE users SET password_hash = ?, password_set = 1 WHERE id = ?")
-        ->execute([$hash, $userId]);
-
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
-    $stmt->execute([$userId]);
-    $user = $stmt->fetch();
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT id, name, email, role, department_id, auth_version
+             FROM users
+             WHERE activation_token_hash = ?
+               AND activation_expires_at > UTC_TIMESTAMP()
+               AND is_active = 1
+               AND password_set = 0
+             LIMIT 1
+             FOR UPDATE"
+        );
+        $stmt->execute([hash('sha256', $token)]);
+        $user = $stmt->fetch();
+        if (!$user || !in_array($user['role'], ['user', 'admin', 'super_admin'], true)) {
+            $pdo->rollBack();
+            return false;
+        }
+        $update = $pdo->prepare(
+            "UPDATE users
+             SET password_hash = ?, password_set = 1, auth_version = auth_version + 1,
+                 activation_token_hash = NULL, activation_expires_at = NULL
+             WHERE id = ?"
+        );
+        $update->execute([$hash, (int)$user['id']]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
 
     session_regenerate_id(true);
+    unset($_SESSION['csrf_token']);
     $_SESSION['user_id']       = $user['id'];
     $_SESSION['name']          = $user['name'];
     $_SESSION['email']         = $user['email'];
     $_SESSION['role']          = $user['role'];
     $_SESSION['department_id'] = $user['department_id'];
+    $_SESSION['auth_version']  = (int)$user['auth_version'] + 1;
+    return true;
 }
 
 function doLogout() {
+    $params = session_get_cookie_params();
     session_unset();
     session_destroy();
+    if (ini_get('session.use_cookies')) {
+        setcookie(session_name(), '', [
+            'expires' => time() - 42000,
+            'path' => $params['path'] ?? '/',
+            'domain' => $params['domain'] ?? '',
+            'secure' => (bool)($params['secure'] ?? false),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
 }

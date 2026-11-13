@@ -99,7 +99,6 @@ function isIgnoredSender($senderEmail) {
         'noreply@verification.salesforce.com',
         'noreply@wetransfer.com',
         'noreply@zen-makemytrip.com',
-        'salesforce@afcindia.in',
         'salesforce-noreply@afcindia.in',
         'notifications-noreply@linkedin.com',
         'office365alerts@microsoft.com',
@@ -111,10 +110,62 @@ function isIgnoredSender($senderEmail) {
         'postmaster@sworks.co.in',
         'sapalert1@ozone-india.com',
         'updates-noreply@linkedin.com',
+        'notifications@afcindia.in',
+        // Marketing / newsletter senders whose subjects use urgent words (TODAY, CRITICAL...).
+        'surveys@grantthornton.in',
+        'news@pockethrms.com',
+        'connect@marketingnow.hp.com',
+        'techcomms@mail.salesforce.com',
+        'info@marsh.com',
+        'insights@kornferry.com',
+        'shashwat.singh@aon.com',
+        'steffie.nitin.bansode@aon.com',
+        'aditi@payzorro.io',
+        'ardourinternationalofficial@gmail.com',
+        'info@wefloweraura.com',
+        'commerciale@neovisione.com',
+        'global-trade@desk.larkagent.us',
+        'liamt@engiconstructionsth.com',
+        'marcus.tan@couserasz.com',
+        'workshop@gmail.com',
+        // Marketing / webinar / gifting promo senders (seen Aug-Oct 2026).
+        'webinars@grantthornton.in',
+        'alerts@jobsalert.shine.com',
+        'insights@reply.kornferry.com',
+        'info@druva.com',
+        'prasad.kachraj@greatplacetowork.in',
+        'ashish.agrawal@greatplacetowork.in',
+        'rashi.girish.bhutada@aon.com',
+        'founder@ambitionbox.com',
+        'gfordinstitute779@gmail.com',
+        'trainingonline716@gmail.com',
+        'mahima@itsonlineweb.com',
+        'innercircle@tajhotels.com',
+        'vrutika.bhimani@rpsg.in',
+        'contact@thegiftstudio.com',
+        'info@updates.igp.com',
+        'corporate@igp.com',
+        'marketing@shiv.enterprises',
+        'aakash.srivastava@benepik.com',
+        'care@updates.nicobar.com',
+        'email@updates.floweraura.com',
+        'heropenindia@gmail.com',
+        'consumers@updates.consumer.pluxee.in',
+        'juhi.bajaj@pluxeegroup.com',
+        'business@ma.ongrid.in',
     ];
 
     $sender = strtolower(trim($senderEmail ?? ''));
+    // Internal Salesforce mailbox carries real work; keep it in the normal workflow.
+    if ($sender === 'salesforce@afcindia.in') {
+        return false;
+    }
     if (in_array($sender, $ignoredSenders, true)) {
+        return true;
+    }
+
+    // Job portals: every address on these domains is automated.
+    if (preg_match('/@(?:[a-z0-9-]+\.)*(?:naukri\.com|workindia\.in)$/i', $sender)) {
         return true;
     }
 
@@ -124,6 +175,57 @@ function isIgnoredSender($senderEmail) {
     }
 
     return (bool)preg_match('/(^|[._-])(no-?reply|do-?not-?reply|donotreply|noreply)([._-]|$)/', $localPart);
+}
+
+/**
+ * Reminder/escalation alerts sent by this tracker itself. They land back in
+ * monitored mailboxes and must never become tickets or escalate again.
+ */
+function isSystemNotificationMail($senderEmail, $subject) {
+    if (strtolower(trim($senderEmail ?? '')) === 'notifications@afcindia.in') {
+        return true;
+    }
+
+    // Match only the exact subjects built in cron/check_escalations.php, so a
+    // client mail like "[Reminder] Payment pending" is still treated as original.
+    return (bool)preg_match(
+        '/^\s*(?i:(?:re|fw|fwd)\s*:\s*)*\[(?:'
+            . '(?:REMINDER\] \d+ pending|ESCALATION ALERT\] \d+ overdue) email task\(s\)'
+            . '|ACTION REQUIRED - Level \d Escalation\] Employee response overdue:'
+            . '|FINAL ESCALATION\] Unresolved after Manager\/HOD:'
+            . '|REMINDER\] Escalated item still open:)/',
+        $subject ?? ''
+    );
+}
+
+/**
+ * Mails that never need a reply: bounces, meeting responses, Salesforce
+ * approval notices, and outside promos/phishing. They may still be tracked,
+ * but must not get reminders or escalations.
+ */
+function isNoReplyNeededMail($senderEmail, $subject) {
+    $sender = strtolower(trim($senderEmail ?? ''));
+    $subject = (string)($subject ?? '');
+
+    if (preg_match('/^(?:mailer-daemon|postmaster)@/', $sender)
+        || preg_match('/^\s*(?:undeliverable|delivery (?:status notification|has failed)|mail delivery failed)\b/i', $subject)) {
+        return true;
+    }
+    if (preg_match('/^\s*(?:accepted|declined|tentative|canceled|cancelled)\s*:/i', $subject)) {
+        return true;
+    }
+    if ($sender === 'salesforce@afcindia.in' && preg_match('/\bhas been approved\b/i', $subject)) {
+        return true;
+    }
+    if (!str_ends_with($sender, '@afcindia.in') && preg_match(
+        '/\b(?:webinar|newsletter|gifting|register now|diwali sale)\b'
+            . '|\b(?:mailbox termination|deactivation notice|card has been locked|password (?:will |is about to |has )?expir)/i',
+        $subject
+    )) {
+        return true;
+    }
+
+    return false;
 }
 
 function isExcludedSubject($subject) {
@@ -173,6 +275,20 @@ function normalizeMailBodyText($body, $contentType = '') {
  * Scan the subject and full message body against configured keyword categories.
  * Returns the highest-priority matching category and keyword.
  */
+/**
+ * Keep only the newest reply - drop the quoted earlier thread below it.
+ * HTML mails lose their line breaks when flattened, so Outlook's
+ * "From: ... Sent:" header is also matched mid-line.
+ */
+function stripQuotedReplyText($body) {
+    $parts = preg_split(
+        '/\R\s*(?:From:|-----\s*Original Message|_{5,}|On .{5,120} wrote:|Sent from my )'
+            . '|\sFrom:\s.{1,200}?\sSent:\s/iu',
+        (string)$body
+    );
+    return $parts === false ? (string)$body : $parts[0];
+}
+
 function isFalsePositiveKeywordSubject($subject) {
     $text = strtolower($subject ?? '');
 
@@ -191,16 +307,19 @@ function isFalsePositiveKeywordSubject($subject) {
     return false;
 }
 
+/**
+ * Keywords are matched in the mail BODY only - never in the subject. The
+ * subject is used just to drop known false positives (job-opportunity spam).
+ */
 function matchTicketKeywords($subject, $body = '') {
     $pdo = getDB();
-    $content = (string)($subject ?? '') . "\n" . (string)($body ?? '');
-    $haystack = strtolower($content);
+    $content = (string)($body ?? '');
 
     if (isFalsePositiveKeywordSubject($subject)) {
         return ['category' => 'normal', 'keyword' => null];
     }
 
-    if (isEodAcknowledgementContent($subject, $body)) {
+    if (isEodAcknowledgementContent('', $content)) {
         return ['category' => 'escalation_trigger', 'keyword' => 'EOD + ACKNOWLEDGEMENT'];
     }
 
@@ -212,13 +331,13 @@ function matchTicketKeywords($subject, $body = '') {
         return ['category' => 'escalation_trigger', 'keyword' => 'URGENT'];
     }
 
-    // Add requested order-intent phrases the same way the rest of the subject
+    // Add requested order-intent phrases the same way the rest of the
     // keyword engine understands high-signal customer/project signals.
     if (preg_match('/\b(?:new\s+order|new\s+order\s+request|new\s+project\s+order|order\s+request|order\s+confirmation)\b/i', $content) === 1) {
         return ['category' => 'customer_project', 'keyword' => 'NEW ORDER'];
     }
 
-    $stmt = $pdo->query("SELECT category, keyword FROM keyword_categories");
+    $stmt = executePreparedQuery($pdo, "SELECT category, keyword FROM keyword_categories");
     $rows = $stmt->fetchAll();
 
     $priorityOrder = ['escalation_trigger', 'customer_project', 'ppc_internal'];

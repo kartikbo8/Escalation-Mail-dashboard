@@ -33,9 +33,18 @@ $dashboardCategories = [
     'open_l2',
     'open_l3',
     'open_escalated',
+    'open_not_escalated',
+    'open_other_no_keyword',
+    'open_other_matched_no_reminder',
+    'open_customer_project',
+    'open_urgent_not_escalated',
+    'open_priority_not_escalated',
     'open_keywords',
     'open_no_keyword',
     'open_matched_no_reminder',
+    'urgent',
+    'replied_urgent',
+    'open_urgent',
 ];
 if (!in_array($dashboardCategory, $dashboardCategories, true)) {
     $dashboardCategory = '';
@@ -51,8 +60,19 @@ if (!isset($notificationLabels[$notificationFilter])) {
     $notificationFilter = '';
 }
 $searchFilter = trim($_GET['search'] ?? '');
+$requestedDate = $_GET['date'] ?? '';
+$dateFilterIsString = is_string($requestedDate);
+$dateFilter = $dateFilterIsString ? trim($requestedDate) : '';
+$selectedDate = $dateFilter === '' ? null : DateTimeImmutable::createFromFormat('!Y-m-d', $dateFilter);
+$dateFilterIsValid = $dateFilterIsString
+    && ($dateFilter === ''
+        || (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFilter) === 1
+            && $selectedDate !== false
+            && $selectedDate->format('Y-m-d') === $dateFilter));
 $message = '';
 $levelFilterIsValid = $levelFilter >= 1 && $levelFilter <= 3;
+// Range picked on the dashboard (or the default last 7 days).
+$dateRange = selectedDateRange($_GET);
 
 $sql = "SELECT
             t.*,
@@ -67,13 +87,15 @@ $sql = "SELECT
 
 $params = [];
 $pendingViewFilter = $dashboardMonthFilter || $levelFilterIsValid || $workloadFilter || $openOnlyFilter || $noKeywordMatchFilter;
-$retentionCutoff = $pendingViewFilter
-    ? date('Y-m-01 00:00:00')
-    : (new DateTimeImmutable('now'))->modify('-30 days')->format('Y-m-d H:i:s');
-$sql .= $pendingViewFilter
-    ? " AND t.received_at >= ?"
-    : " AND (t.received_at >= ? OR t.status IN ('open', 'escalated'))";
-$params[] = $retentionCutoff;
+if ($dateFilter !== '' && $dateFilterIsValid) {
+    $sql .= " AND t.received_at >= ? AND t.received_at < ?";
+    $params[] = $selectedDate->format('Y-m-d H:i:s');
+    $params[] = $selectedDate->modify('+1 day')->format('Y-m-d H:i:s');
+} else {
+    $sql .= " AND t.received_at >= ? AND t.received_at < ?";
+    $params[] = $dateRange['start'];
+    $params[] = $dateRange['end'];
+}
 
 if ($deptFilter !== '') {
     $sql .= " AND t.department_id = ?";
@@ -81,8 +103,7 @@ if ($deptFilter !== '') {
 }
 
 if ($dashboardMonthFilter) {
-    $sql .= " AND t.received_at >= ? AND t.status <> 'closed'";
-    $params[] = date('Y-m-01 00:00:00');
+    $sql .= " AND t.status <> 'closed'";
 }
 
 if ($assigneeFilter !== null) {
@@ -130,6 +151,7 @@ if ($dashboardMonthFilter && $dashboardCategory !== '') {
           AND ev.note LIKE 'Reminder included in consolidated digest%'
     )";
     $keywordMatched = "(COALESCE(t.is_important, 0) = 1 OR COALESCE(t.escalation_queued, 0) = 1 OR t.status = 'escalated')";
+    $notPriority = "(COALESCE(t.priority_tag, 'normal') NOT IN ('customer_project', 'escalation_trigger'))";
     $dashboardCategoryConditions = [
         'all' => '1 = 1',
         'replied' => "t.status = 'replied'",
@@ -147,10 +169,19 @@ if ($dashboardMonthFilter && $dashboardCategory !== '') {
         'open_l1' => "t.status <> 'replied' AND NOT $l3Sent AND NOT $l2Sent AND $l1Sent",
         'open_l2' => "t.status <> 'replied' AND NOT $l3Sent AND $l2Sent",
         'open_l3' => "t.status <> 'replied' AND $l3Sent",
-        'open_escalated' => "t.status <> 'replied' AND ($l3Sent OR $l2Sent OR $l1Sent)",
+        'open_escalated' => "t.status <> 'replied' AND ($l3Sent OR $l2Sent OR $l1Sent OR COALESCE(t.priority_tag, 'normal') = 'customer_project')",
+        'open_not_escalated' => "t.status <> 'replied' AND NOT $l3Sent AND NOT $l2Sent AND NOT $l1Sent AND $notPriority",
+        'open_other_no_keyword' => "t.status <> 'replied' AND NOT $l3Sent AND NOT $l2Sent AND NOT $l1Sent AND $notPriority AND NOT $keywordMatched",
+        'open_other_matched_no_reminder' => "t.status <> 'replied' AND NOT $l3Sent AND NOT $l2Sent AND NOT $l1Sent AND $notPriority AND $keywordMatched",
+        'open_customer_project' => "t.status <> 'replied' AND NOT $l3Sent AND NOT $l2Sent AND NOT $l1Sent AND COALESCE(t.priority_tag, 'normal') = 'customer_project'",
+        'open_urgent_not_escalated' => "t.status <> 'replied' AND NOT $l3Sent AND NOT $l2Sent AND NOT $l1Sent AND COALESCE(t.priority_tag, 'normal') = 'escalation_trigger'",
+        'open_priority_not_escalated' => "t.status <> 'replied' AND NOT $l3Sent AND NOT $l2Sent AND NOT $l1Sent AND NOT $notPriority",
         'open_keywords' => "t.status NOT IN ('replied', 'closed') AND ($l3Sent OR $l2Sent OR $l1Sent OR $keywordMatched)",
         'open_no_keyword' => "t.status <> 'replied' AND NOT $l3Sent AND NOT $l2Sent AND NOT $l1Sent AND NOT $keywordMatched",
         'open_matched_no_reminder' => "t.status <> 'replied' AND NOT $l3Sent AND NOT $l2Sent AND NOT $l1Sent AND $keywordMatched",
+        'urgent' => "t.priority_tag = 'escalation_trigger'",
+        'replied_urgent' => "t.priority_tag = 'escalation_trigger' AND t.status = 'replied'",
+        'open_urgent' => "t.priority_tag = 'escalation_trigger' AND t.status <> 'replied'",
     ];
     $sql .= ' AND ' . $dashboardCategoryConditions[$dashboardCategory];
 }
@@ -256,7 +287,7 @@ if ($statusFilter !== '') {
         $sql .= " AND t.status = ?";
         $params[] = $statusFilter;
     }
-} elseif (!$dashboardMonthFilter) {
+} elseif (!$dashboardMonthFilter && !$pendingViewFilter && ($dateFilter === '' || !$dateFilterIsValid)) {
     $sql .= " AND (t.status <> 'closed' OR t.escalation_level >= 2)";
 }
 
@@ -310,7 +341,13 @@ if ($portalDepartmentIds !== null) {
                 <?= htmlspecialchars($tickets[0]['assignee_name'] ?? ($assigneeFilter > 0 ? 'Employee' : 'Unassigned')) ?>
                 — <?= htmlspecialchars(ucwords(str_replace('_', ' ', $dashboardCategory))) ?>
             <?php elseif ($dashboardMonthFilter): ?>
-                <?= htmlspecialchars(ucwords(str_replace('_', ' ', $dashboardCategory))) ?> Emails
+                <?= htmlspecialchars([
+                    'open_not_escalated' => 'Open',
+                    'open_escalated' => 'Escalated',
+                    'open_customer_project' => 'Customer / Project',
+                    'open_urgent_not_escalated' => 'Urgent',
+                    'open_priority_not_escalated' => 'Customer / Project & Urgent',
+                ][$dashboardCategory] ?? ucwords(str_replace('_', ' ', $dashboardCategory))) ?> Emails
             <?php elseif (($workloadFilter || $noKeywordMatchFilter) && $assigneeFilter !== null): ?>
                 <?= htmlspecialchars($tickets[0]['assignee_name'] ?? ($assigneeFilter > 0 ? 'Employee' : 'Unassigned')) ?>
                 — <?= $noKeywordMatchFilter
@@ -326,9 +363,12 @@ if ($portalDepartmentIds !== null) {
         </h3>
         <div class="text-muted small">
             <?= count($tickets) ?> ticket(s) found · includes normal and keyword-matched emails
-            <?php if (!$pendingViewFilter): ?> · last 30 days<?php endif; ?>
-            <?php if ($dashboardMonthFilter): ?> · received this month · closed emails excluded<?php endif; ?>
-            <?php if ($noKeywordMatchFilter): ?> · open emails with no escalation keyword match<?php endif; ?>
+            <?php if ($dateFilter !== '' && $dateFilterIsValid): ?>
+                · received on <?= htmlspecialchars($selectedDate->format('d M Y')) ?>
+            <?php else: ?>
+                · <?= htmlspecialchars($dateRange['label']) ?>
+            <?php endif; ?>
+            <?php if ($dashboardMonthFilter): ?> · closed emails excluded<?php endif; ?>            <?php if ($noKeywordMatchFilter): ?> · open emails with no escalation keyword match<?php endif; ?>
             <?php if ($levelFilterIsValid): ?> · Pending Level <?= $levelFilter ?><?php endif; ?>
             <?php if ($workloadFilter && $notificationFilter === '' && !$escalationRepliesFilter): ?> · Open, escalated and replied emails<?php endif; ?>
             <?php if ($escalationRepliesFilter): ?> · Replied escalations only<?php endif; ?>
@@ -336,6 +376,10 @@ if ($portalDepartmentIds !== null) {
         </div>
     </div>
 </div>
+
+<?php if (!$dateFilterIsValid): ?>
+    <div class="alert alert-warning" role="alert">Please choose a valid date.</div>
+<?php endif; ?>
 
 <?php if ($workloadFilter && $notificationFilter === '' && !$escalationRepliesFilter): ?>
     <div class="row g-3 mb-3">
@@ -355,6 +399,10 @@ if ($portalDepartmentIds !== null) {
 <?php endif; ?>
 
 <form method="GET" class="row g-2 mb-3">
+    <?php if ($dateRange['is_custom']): ?>
+        <input type="hidden" name="from" value="<?= htmlspecialchars($dateRange['from']) ?>">
+        <input type="hidden" name="to" value="<?= htmlspecialchars($dateRange['to']) ?>">
+    <?php endif; ?>
     <?php if ($dashboardMonthFilter): ?>
         <input type="hidden" name="dashboard_month" value="1">
         <input type="hidden" name="dashboard_category" value="<?= htmlspecialchars($dashboardCategory, ENT_QUOTES, 'UTF-8') ?>">
@@ -394,7 +442,20 @@ if ($portalDepartmentIds !== null) {
             <option value="escalated" <?= $statusFilter === 'escalated' ? 'selected' : '' ?>>Escalated</option>
         </select>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
+        <label class="visually-hidden" for="email-received-date">Received date</label>
+        <div class="input-group input-group-sm">
+            <span class="input-group-text">Date</span>
+            <input
+                type="date"
+                id="email-received-date"
+                name="date"
+                class="form-control"
+                value="<?= $dateFilterIsValid ? htmlspecialchars($dateFilter, ENT_QUOTES, 'UTF-8') : '' ?>"
+            >
+        </div>
+    </div>
+    <div class="col-md-3">
         <input type="search" name="search" class="form-control form-control-sm" placeholder="Search subject / sender" value="<?= htmlspecialchars($searchFilter) ?>">
     </div>
     <div class="col-md-2">
@@ -437,7 +498,7 @@ if ($portalDepartmentIds !== null) {
                     <td><?= htmlspecialchars($t['sender_email'] ?: '-') ?></td>
                     <td><?= htmlspecialchars($t['department_name'] ?? '-') ?></td>
                     <td><?= statusBadge($t['status']) ?></td>
-                    <td><?= priorityBadge($t['priority_tag'] ?? 'normal') ?></td>
+                    <td><?= priorityBadge($t['priority_tag'] ?? 'normal', $t['matched_keyword'] ?? null) ?></td>
                     <td><?= !empty($t['received_at'])
                         ? htmlspecialchars(date('d M Y, h:i A', strtotime($t['received_at'])))
                         : '-' ?></td>

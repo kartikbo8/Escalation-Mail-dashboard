@@ -4,11 +4,16 @@ require_once __DIR__ . '/../includes/functions.php';
 requireRole(['super_admin', 'admin']);
 
 $pdo = getDB();
+$departmentIds = portalDepartmentIds();
+$departmentScope = currentUser()['role'] === 'super_admin'
+    ? '1=1'
+    : ($departmentIds ? 'ec.department_id IN (' . implode(',', array_map('intval', $departmentIds)) . ') OR ec.department_id IS NULL' : '1=0');
 
-$contacts = $pdo->query(
+$contacts = executePreparedQuery($pdo,
     "SELECT ec.role_type, ec.name, ec.email, ec.department_id, d.name AS department_name
      FROM escalation_contacts ec
      LEFT JOIN departments d ON d.id = ec.department_id
+     WHERE {$departmentScope}
      ORDER BY ec.role_type, ec.name"
 )->fetchAll(PDO::FETCH_ASSOC);
 
@@ -18,7 +23,7 @@ foreach ($contacts as $contact) {
     $contactsByDepartment[$key][] = $contact;
 }
 
-$users = $pdo->query(
+$users = executePreparedQuery($pdo,
     "SELECT u.name AS employee_name, u.email AS employee_email, u.role AS employee_role, d.name AS department_name,
             m.name AS manager_name, m.email AS manager_email,
             m2.name AS manager_2_name, m2.email AS manager_2_email,
@@ -28,7 +33,7 @@ $users = $pdo->query(
      LEFT JOIN users m ON m.id = u.reporting_manager_id
      LEFT JOIN users m2 ON m2.id = u.reporting_manager_2_id
      LEFT JOIN users h ON h.id = d.hod_user_id
-     WHERE u.is_active = 1
+     WHERE u.is_active = 1 AND " . portalUserCondition('u') . "
      ORDER BY d.name, u.name"
 )->fetchAll(PDO::FETCH_ASSOC);
 

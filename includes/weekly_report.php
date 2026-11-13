@@ -49,7 +49,7 @@ function weeklyReportFetchDepartments(PDO $pdo, ?int $departmentId = null): arra
         return [$department];
     }
 
-    return $pdo->query('SELECT id, name FROM departments ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+    return executePreparedQuery($pdo, 'SELECT id, name FROM departments ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 }
 
 function weeklyReportFetchTickets(PDO $pdo, DateTimeImmutable $start, DateTimeImmutable $endExclusive, ?int $departmentId = null): array {
@@ -351,7 +351,7 @@ function weeklyReportBuildWorkbook(PDO $pdo, DateTimeImmutable $start, DateTimeI
 
 function weeklyReportRecipients(PDO $pdo): array {
     $recipients = [];
-    $departments = $pdo->query('SELECT id, name, hod_user_id FROM departments ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
+    $departments = executePreparedQuery($pdo, 'SELECT id, name, hod_user_id FROM departments ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
 
     foreach ($departments as $department) {
         $departmentId = (int)$department['id'];
@@ -383,7 +383,7 @@ function weeklyReportRecipients(PDO $pdo): array {
         }
     }
 
-    $hrAdmin = $pdo->query(
+    $hrAdmin = executePreparedQuery($pdo,
         "SELECT name, email FROM escalation_contacts
          WHERE role_type IN ('hr', 'admin') AND email <> ''
          ORDER BY role_type, name"

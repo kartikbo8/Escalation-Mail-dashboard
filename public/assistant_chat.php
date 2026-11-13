@@ -3,6 +3,7 @@ require_once __DIR__ . '/../includes/auth.php';
 requireLogin();
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/ai_helper.php';
+require_once __DIR__ . '/../includes/keyword_helper.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, private');
@@ -131,7 +132,7 @@ if ($isActionRequest) {
         );
     } else {
         $pdo = getDB();
-        $sql = "SELECT t.id, t.department_id, t.status, u.email AS assignee_email
+        $sql = "SELECT t.id, t.department_id, t.status, t.sender_email, u.email AS assignee_email
                 FROM tickets t
                 JOIN departments d ON d.id = t.department_id
                 LEFT JOIN users u ON u.id = t.assigned_to
@@ -170,6 +171,12 @@ if ($isActionRequest) {
             $answer = $actionMessage(
                 'A reminder preview is available only for an open ticket with an assigned employee. I have not sent anything.',
                 'Reminder preview sirf open ticket aur assigned employee ke liye ban sakta hai. Abhi kuch bheja nahi gaya.'
+            );
+        } elseif ($parsed['action'] === 'send_reminder'
+            && isIgnoredSender($ticket['sender_email'])) {
+            $answer = $actionMessage(
+                'Reminders are disabled for Naukri.com emails because they are treated as normal mail. I have not sent anything.',
+                'Naukri.com se aaye emails normal mail maane jaate hain, isliye unke reminders band hain. Abhi kuch nahi bheja gaya.'
             );
         } else {
             $pendingAction = [

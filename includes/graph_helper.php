@@ -168,6 +168,36 @@ function graphApiGet($endpoint, $accessToken) {    $ch = curl_init(GRAPH_API_BAS
     return json_decode($response, true);
 }
 
+function graphApiGetRaw($endpoint, $accessToken) {
+    $ch = curl_init(GRAPH_API_BASE . $endpoint);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Bearer ' . $accessToken,
+            'Accept: application/octet-stream',
+        ],
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if ($response === false || $curlError !== '') {
+        return ['error' => ['message' => $curlError !== '' ? $curlError : 'Could not download the attachment.']];
+    }
+    if ($httpCode < 200 || $httpCode >= 300) {
+        $errorResponse = json_decode($response, true);
+        return [
+            'error' => [
+                'code' => $httpCode,
+                'message' => $errorResponse['error']['message'] ?? 'Microsoft Graph could not download the attachment.',
+            ],
+        ];
+    }
+
+    return ['content' => $response];
+}
+
 /**
  * Fetch recent messages from a mailbox (delta/new messages).
  * $mailbox = 'me' or a shared mailbox address/id.
@@ -179,9 +209,11 @@ function graphGetMessages($accessToken, $mailbox = 'me', $top = 200, $maxResults
         ? '/me/messages'
         : '/users/' . rawurlencode($mailbox) . '/messages';
     
-    // Default to fetching emails from September 1, 2026 onwards (change as needed)
+    // Default to the last 7 days only. Re-reading the whole mailbox every run made
+    // each sync take minutes and turned months-old mail into new tickets; an
+    // older day can still be synced on purpose with fetch_new_mails.php --date=.
     if ($since === null) {
-        $since = '2026-09-01T00:00:00Z';
+        $since = gmdate('Y-m-d\TH:i:s\Z', strtotime('-7 days'));
     }
     $filterExpression = 'receivedDateTime ge ' . $since;
     if ($until !== null) {
@@ -229,12 +261,14 @@ function graphGetMessages($accessToken, $mailbox = 'me', $top = 200, $maxResults
 function graphGetMessage($accessToken, $mailbox, $messageId) {
     if (!$mailbox || !$messageId) return null;
     $endpoint = "/users/" . rawurlencode($mailbox) . "/messages/" . rawurlencode($messageId)
-        . "?\$select=subject,from,body,receivedDateTime";
+        . "?\$select=subject,from,toRecipients,ccRecipients,body,receivedDateTime";
     $message = graphApiGet($endpoint, $accessToken);
-    if (isset($message['error'])) return null;
+    if (!is_array($message) || isset($message['error'])) return null;
 
+    // No $select here: contentBytes only exists on fileAttachment, and Graph
+    // rejects selecting it on the base attachment collection.
     $attachmentsEndpoint = "/users/" . rawurlencode($mailbox) . "/messages/"
-        . rawurlencode($messageId) . "/attachments?\$select=name,contentType,size,isInline,contentBytes";
+        . rawurlencode($messageId) . "/attachments";
     $attachments = graphApiGet($attachmentsEndpoint, $accessToken);
     $message['attachments'] = $attachments['value'] ?? [];
     return $message;
@@ -248,6 +282,157 @@ function graphGetMessageBody($accessToken, $mailbox, $messageId) {
     $endpoint = "/users/" . rawurlencode($mailbox) . "/messages/" . rawurlencode($messageId)
         . "?\$select=body";
     return graphApiGet($endpoint, $accessToken);
+}
+
+/**
+ * Fetch the original email headers, body, and non-binary attachment metadata
+ * for the ticket detail page.
+ */
+function graphGetMessageForDisplay($accessToken, $mailbox, $messageId) {
+    if (!$mailbox || !$messageId) {
+        return null;
+    }
+
+    $messageEndpoint = "/users/" . rawurlencode($mailbox) . "/messages/"
+        . rawurlencode($messageId)
+        . "?\$select=subject,from,toRecipients,ccRecipients,body,receivedDateTime,hasAttachments";
+    $message = graphApiGet($messageEndpoint, $accessToken);
+    if (isset($message['error']) || empty($message['hasAttachments'])) {
+        return $message;
+    }
+
+    $attachmentResponse = graphGetMessageAttachments($accessToken, $mailbox, $messageId);
+    if (isset($attachmentResponse['error'])) {
+        $message['attachments'] = [];
+        $message['attachments_error'] = $attachmentResponse['error']['message']
+            ?? 'Microsoft Graph could not load attachment details.';
+        return $message;
+    }
+    $message['attachments'] = $attachmentResponse['value'] ?? [];
+    return $message;
+}
+
+function graphGetMessageAttachments($accessToken, $mailbox, $messageId) {
+    if (!$mailbox || !$messageId) {
+        return null;
+    }
+
+    $attachmentsEndpoint = "/users/" . rawurlencode($mailbox) . "/messages/"
+        . rawurlencode($messageId) . "/attachments?\$select=id,name,contentType,size,isInline";
+    $attachmentResponse = graphApiGet($attachmentsEndpoint, $accessToken);
+    if (isset($attachmentResponse['error'])) {
+        return $attachmentResponse;
+    }
+
+    foreach (($attachmentResponse['value'] ?? []) as $index => $attachment) {
+        if (!is_array($attachment)) {
+            continue;
+        }
+        if (($attachment['@odata.type'] ?? '') === '#microsoft.graph.referenceAttachment'
+            && !empty($attachment['id'])) {
+            $referenceEndpoint = "/users/" . rawurlencode($mailbox) . "/messages/"
+                . rawurlencode($messageId) . "/attachments/"
+                . rawurlencode($attachment['id']);
+            $referenceDetails = graphApiGet($referenceEndpoint, $accessToken);
+            if (!isset($referenceDetails['error'])) {
+                $attachment['sourceUrl'] = $referenceDetails['sourceUrl'] ?? null;
+                $attachment['providerType'] = $referenceDetails['providerType'] ?? null;
+            }
+        }
+        $attachmentResponse['value'][$index] = $attachment;
+    }
+
+    return $attachmentResponse;
+}
+
+/**
+ * Attachments sent later in the same conversation (client/employee replies),
+ * oldest first. The ticket's own message is skipped.
+ */
+function graphGetConversationAttachments($accessToken, $mailbox, $conversationId, $excludeMessageId = '') {
+    if (!$mailbox || !$conversationId) {
+        return [];
+    }
+
+    $filter = "conversationId eq '" . str_replace("'", "''", $conversationId) . "'";
+    $response = graphApiGet(
+        "/users/" . rawurlencode($mailbox) . "/messages?\$filter=" . rawurlencode($filter)
+            . "&\$select=id,from,receivedDateTime,hasAttachments&\$top=50",
+        $accessToken
+    );
+    if (!is_array($response) || isset($response['error'])) {
+        return ['error' => $response['error'] ?? ['message' => 'Could not load the email thread.']];
+    }
+
+    $messages = [];
+    foreach (($response['value'] ?? []) as $message) {
+        if (empty($message['hasAttachments']) || empty($message['id']) || $message['id'] === $excludeMessageId) {
+            continue;
+        }
+        $attachmentResponse = graphGetMessageAttachments($accessToken, $mailbox, $message['id']);
+        if (!is_array($attachmentResponse) || isset($attachmentResponse['error'])) {
+            continue;
+        }
+        $message['attachments'] = $attachmentResponse['value'] ?? [];
+        $messages[] = $message;
+    }
+
+    usort($messages, static function ($a, $b) {
+        return strcmp($a['receivedDateTime'] ?? '', $b['receivedDateTime'] ?? '');
+    });
+    return $messages;
+}
+
+/**
+ * Messages of one conversation as seen in $mailbox (sender, sent time, draft
+ * flag, subject). Empty array when the mailbox or thread is unavailable.
+ */
+function graphGetConversationMessages($accessToken, $mailbox, $conversationId) {
+    if (!$mailbox || !$conversationId) {
+        return [];
+    }
+
+    $filter = "conversationId eq '" . str_replace("'", "''", $conversationId) . "'";
+    $response = graphApiGet(
+        "/users/" . rawurlencode($mailbox) . "/messages?\$filter=" . rawurlencode($filter)
+            . "&\$select=from,sentDateTime,isDraft,subject&\$top=50",
+        $accessToken
+    );
+    return is_array($response) && !isset($response['error']) ? ($response['value'] ?? []) : [];
+}
+
+/**
+ * Outlook Web link to the same mail inside $targetMailbox (matched by
+ * internetMessageId), so a reminder/escalation recipient can open it and
+ * Reply All from their own mailbox. Null when the mail is not in that mailbox.
+ */
+function graphGetMessageLinkInMailbox($accessToken, $sourceMailbox, $messageId, $targetMailbox) {
+    static $internetMessageIds = [];
+    if (!$sourceMailbox || !$messageId || !$targetMailbox) {
+        return null;
+    }
+
+    $cacheKey = strtolower($sourceMailbox) . '|' . $messageId;
+    if (!array_key_exists($cacheKey, $internetMessageIds)) {
+        $source = graphApiGet(
+            "/users/" . rawurlencode($sourceMailbox) . "/messages/" . rawurlencode($messageId)
+                . "?\$select=internetMessageId",
+            $accessToken
+        );
+        $internetMessageIds[$cacheKey] = is_array($source) ? ($source['internetMessageId'] ?? null) : null;
+    }
+    $internetMessageId = $internetMessageIds[$cacheKey];
+    if (!$internetMessageId) {
+        return null;
+    }
+
+    $filter = "internetMessageId eq '" . str_replace("'", "''", $internetMessageId) . "'";
+    $response = graphApiGet(
+        "/users/" . rawurlencode($targetMailbox) . "/messages?\$filter=" . rawurlencode($filter)
+            . "&\$select=webLink&\$top=1",
+        $accessToken
+    );
+    return is_array($response) ? ($response['value'][0]['webLink'] ?? null) : null;
 }
 
 /**

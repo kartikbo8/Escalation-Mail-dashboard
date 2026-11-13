@@ -11,7 +11,7 @@ $pdo = getDB();
 $reportDate = (new DateTimeImmutable('yesterday'))->format('Y-m-d');
 $reportStart = $reportDate . ' 00:00:00';
 $reportEnd = (new DateTimeImmutable($reportDate))->modify('+1 day')->format('Y-m-d 00:00:00');
-$departmentStmt = $pdo->query(
+$departmentStmt = executePreparedQuery($pdo,
     "SELECT d.id, d.name
      FROM departments d
      WHERE " . portalDepartmentCondition('d') . "

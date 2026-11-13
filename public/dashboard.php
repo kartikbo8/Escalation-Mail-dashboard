@@ -3,8 +3,9 @@ require_once __DIR__ . '/../includes/layout_header.php';
 require_once __DIR__ . '/../includes/functions.php';
 
 $pdo = getDB();
-$dashboardStartDate = date('Y-m-01 00:00:00');
-$departmentStmt = $pdo->query(
+$dateRange = selectedDateRange($_GET);
+$dateRangeQuery = $dateRange['is_custom'] ? ['from' => $dateRange['from'], 'to' => $dateRange['to']] : [];
+$departmentStmt = executePreparedQuery($pdo,
     "SELECT id, name
      FROM departments d
      WHERE " . portalDepartmentCondition('d') . "
@@ -56,7 +57,26 @@ $levelStatsStmt = $pdo->prepare(
                      THEN 1 ELSE 0 END) AS matched_no_reminder_replied,
             SUM(CASE WHEN t.status <> 'replied' AND delivery.l3_sent = 0 AND delivery.l2_sent = 0 AND delivery.l1_sent = 0
                            AND (COALESCE(t.is_important, 0) = 1 OR COALESCE(t.escalation_queued, 0) = 1 OR t.status = 'escalated')
-                     THEN 1 ELSE 0 END) AS matched_no_reminder_open
+                     THEN 1 ELSE 0 END) AS matched_no_reminder_open,
+            -- Urgent (URGENT, TODAY, ASAP...) cuts across the levels above, so it is reported separately.
+            SUM(CASE WHEN t.priority_tag = 'escalation_trigger' THEN 1 ELSE 0 END) AS urgent_count,
+            SUM(CASE WHEN t.priority_tag = 'escalation_trigger' AND t.status = 'replied' THEN 1 ELSE 0 END) AS urgent_replied,
+            SUM(CASE WHEN t.priority_tag = 'escalation_trigger' AND t.status <> 'replied' THEN 1 ELSE 0 END) AS urgent_open,
+            -- Open, not escalated, split by priority so Customer/Project and Urgent sit outside plain Open.
+            SUM(CASE WHEN t.status <> 'replied' AND delivery.l3_sent = 0 AND delivery.l2_sent = 0 AND delivery.l1_sent = 0
+                           AND COALESCE(t.priority_tag, 'normal') = 'customer_project'
+                     THEN 1 ELSE 0 END) AS customer_project_open,
+            SUM(CASE WHEN t.status <> 'replied' AND delivery.l3_sent = 0 AND delivery.l2_sent = 0 AND delivery.l1_sent = 0
+                           AND COALESCE(t.priority_tag, 'normal') = 'escalation_trigger'
+                     THEN 1 ELSE 0 END) AS urgent_not_escalated_open,
+            SUM(CASE WHEN t.status <> 'replied' AND delivery.l3_sent = 0 AND delivery.l2_sent = 0 AND delivery.l1_sent = 0
+                           AND COALESCE(t.priority_tag, 'normal') NOT IN ('customer_project', 'escalation_trigger')
+                           AND NOT (COALESCE(t.is_important, 0) = 1 OR COALESCE(t.escalation_queued, 0) = 1 OR t.status = 'escalated')
+                     THEN 1 ELSE 0 END) AS other_no_keyword_open,
+            SUM(CASE WHEN t.status <> 'replied' AND delivery.l3_sent = 0 AND delivery.l2_sent = 0 AND delivery.l1_sent = 0
+                           AND COALESCE(t.priority_tag, 'normal') NOT IN ('customer_project', 'escalation_trigger')
+                           AND (COALESCE(t.is_important, 0) = 1 OR COALESCE(t.escalation_queued, 0) = 1 OR t.status = 'escalated')
+                     THEN 1 ELSE 0 END) AS other_matched_no_reminder_open
      FROM tickets t
      JOIN departments d ON d.id = t.department_id
      LEFT JOIN users u ON u.id = t.assigned_to
@@ -88,16 +108,15 @@ $levelStatsStmt = $pdo->prepare(
              GROUP BY ticket_id
          ) escalation_delivery ON escalation_delivery.ticket_id = ticket.id
      ) delivery ON delivery.ticket_id = t.id
-     WHERE t.received_at >= ?
+     WHERE t.received_at >= ? AND t.received_at < ?
        AND t.status <> 'closed'
        AND " . portalTicketCondition('t') . "
        AND " . portalDepartmentCondition('d') . "
      GROUP BY d.id, d.name, employee_department.id, employee_department.name, u.id, u.name
      ORDER BY d.name, assignee_name"
 );
-$levelStatsStmt->execute([$dashboardStartDate]);
+$levelStatsStmt->execute([$dateRange['start'], $dateRange['end']]);
 $levelStats = $levelStatsStmt->fetchAll();
-
 $employeeInsights = [];
 $employeeCountMetrics = [
     'total_mail_count', 'replied_count', 'open_count',
@@ -105,6 +124,7 @@ $employeeCountMetrics = [
     'l1_replied', 'l1_open', 'l2_replied', 'l2_open', 'l3_replied', 'l3_open',
     'no_keyword_replied', 'no_keyword_open',
     'matched_no_reminder_replied', 'matched_no_reminder_open',
+    'urgent_count', 'urgent_replied', 'urgent_open',
 ];
 foreach ($levelStats as $row) {
     $assigneeId = $row['assignee_id'] === null ? 0 : (int)$row['assignee_id'];
@@ -151,6 +171,8 @@ $summary = [
     'replied_no_keyword' => 0, 'replied_matched_no_reminder' => 0,
     'open_l1' => 0, 'open_l2' => 0, 'open_l3' => 0,
     'open_no_keyword' => 0, 'open_matched_no_reminder' => 0,
+    'open_customer_project' => 0, 'open_urgent_not_escalated' => 0,
+    'open_other_no_keyword' => 0, 'open_other_matched_no_reminder' => 0,
 ];
 $departmentMetrics = [];
 foreach ($levelStats as $row) {
@@ -196,6 +218,8 @@ foreach ($levelStats as $row) {
         'replied_no_keyword' => 'no_keyword_replied', 'replied_matched_no_reminder' => 'matched_no_reminder_replied',
         'open_l1' => 'l1_open', 'open_l2' => 'l2_open', 'open_l3' => 'l3_open',
         'open_no_keyword' => 'no_keyword_open', 'open_matched_no_reminder' => 'matched_no_reminder_open',
+        'open_customer_project' => 'customer_project_open', 'open_urgent_not_escalated' => 'urgent_not_escalated_open',
+        'open_other_no_keyword' => 'other_no_keyword_open', 'open_other_matched_no_reminder' => 'other_matched_no_reminder_open',
     ] as $summaryKey => $column) {
         $summary[$summaryKey] += (int)$row[$column];
     }
@@ -214,14 +238,17 @@ $openBreakdownTotal = $summary['open_l1'] + $summary['open_l2'] + $summary['open
     + $summary['open_no_keyword'] + $summary['open_matched_no_reminder'];
 if ($summary['total'] !== $summary['replied'] + $summary['open']
     || $repliedBreakdownTotal !== $summary['replied']
-    || $openBreakdownTotal !== $summary['open']) {
+    || $openBreakdownTotal !== $summary['open']
+    || $summary['open_no_keyword'] + $summary['open_matched_no_reminder']
+        !== $summary['open_customer_project'] + $summary['open_urgent_not_escalated']
+            + $summary['open_other_no_keyword'] + $summary['open_other_matched_no_reminder']) {
     throw new LogicException('Dashboard email categories do not reconcile with the status totals.');
 }
-$emailListUrl = static function (string $category, ?array $employee = null): string {
+$emailListUrl = static function (string $category, ?array $employee = null) use ($dateRangeQuery): string {
     $filters = [
         'dashboard_month' => '1',
         'dashboard_category' => $category,
-    ];
+    ] + $dateRangeQuery;
     if ($employee !== null) {
         $filters['assigned_to'] = (string)($employee['assignee_id'] ?? 0);
         if ((int)($employee['assignee_id'] ?? 0) === 0) {
@@ -231,12 +258,12 @@ $emailListUrl = static function (string $category, ?array $employee = null): str
 
     return htmlspecialchars('all_emails.php?' . http_build_query($filters), ENT_QUOTES, 'UTF-8');
 };
-$departmentEmailListUrl = static function (string $category, int $departmentId): string {
+$departmentEmailListUrl = static function (string $category, int $departmentId) use ($dateRangeQuery): string {
     $filters = [
         'dashboard_month' => '1',
         'dashboard_category' => $category,
         'department' => (string)$departmentId,
-    ];
+    ] + $dateRangeQuery;
     return htmlspecialchars('all_emails.php?' . http_build_query($filters), ENT_QUOTES, 'UTF-8');
 };
 ?>
@@ -245,12 +272,48 @@ $departmentEmailListUrl = static function (string $category, int $departmentId):
 <div class="d-flex justify-content-between align-items-center mb-3 dashboard-page-header">
     <div>
         <h3 class="mb-1">Email overview</h3>
-        <div class="text-muted small">Month to date · from <?= date('d M Y', strtotime($dashboardStartDate)) ?></div>
+        <div class="text-muted small"><?= htmlspecialchars($dateRange['label']) ?></div>
     </div>
     <div class="d-flex flex-wrap gap-2">
         <a href="department_dashboard_export.php" class="btn btn-success btn-sm">Download Excel Sheet (Yesterday)</a>
         <a href="report.php" target="_blank" class="btn btn-outline-secondary btn-sm">Status report (PDF)</a>
     </div>
+</div>
+
+<?php
+$today = date('Y-m-d');
+$rangePresets = [
+    'Last ' . DATA_WINDOW_DAYS . ' days' => [],
+    'Last 30 days' => ['from' => date('Y-m-d', strtotime('-29 days')), 'to' => $today],
+    'This month' => ['from' => date('Y-m-01'), 'to' => $today],
+];
+$keptFilters = array_filter([
+    'employee_department_id' => $selectedEmployeeDepartmentId,
+    'employee_key' => $selectedEmployeeKey,
+], static fn($value) => $value !== null && $value !== '');
+?>
+<div class="dashboard-range-bar mb-4">
+    <span class="dashboard-range-title">Period</span>
+    <div class="dashboard-range-presets" role="group" aria-label="Quick periods">
+        <?php foreach ($rangePresets as $presetLabel => $presetQuery): ?>
+            <?php $isActive = $presetQuery === $dateRangeQuery; ?>
+            <a href="dashboard.php<?= ($presetQuery + $keptFilters) ? '?' . htmlspecialchars(http_build_query($presetQuery + $keptFilters)) : '' ?>"
+               class="dashboard-range-chip<?= $isActive ? ' is-active' : '' ?>"><?= htmlspecialchars($presetLabel) ?></a>
+        <?php endforeach; ?>
+    </div>
+    <form method="GET" action="dashboard.php" class="dashboard-range-form">
+        <?php foreach ($keptFilters as $keptKey => $keptValue): ?>
+            <input type="hidden" name="<?= $keptKey ?>" value="<?= htmlspecialchars((string)$keptValue, ENT_QUOTES, 'UTF-8') ?>">
+        <?php endforeach; ?>
+        <label for="dashboard-from">From</label>
+        <input type="date" id="dashboard-from" name="from" class="form-control form-control-sm"
+            value="<?= htmlspecialchars($dateRange['from']) ?>" max="<?= $today ?>" required>
+        <span class="dashboard-range-sep" aria-hidden="true">→</span>
+        <label for="dashboard-to">To</label>
+        <input type="date" id="dashboard-to" name="to" class="form-control form-control-sm"
+            value="<?= htmlspecialchars($dateRange['to']) ?>" max="<?= $today ?>" required>
+        <button type="submit" class="btn btn-sm dashboard-range-apply">Apply</button>
+    </form>
 </div>
 
 <section class="dashboard-pending-overview mb-4" aria-labelledby="pending-overview-title">
@@ -264,17 +327,27 @@ $departmentEmailListUrl = static function (string $category, int $departmentId):
         <a href="<?= $emailListUrl('all') ?>" class="dashboard-director-total dashboard-total dashboard-metric-link">
             <span class="dashboard-total-number"><?= $summary['total'] ?></span>
             <span class="dashboard-total-label">Total emails</span>
-            <span class="dashboard-total-help">Received this month · excluding closed</span>
+            <span class="dashboard-total-help">Received in the selected period · excluding closed</span>
         </a>
         <a href="<?= $emailListUrl('replied') ?>" class="dashboard-director-total dashboard-replied dashboard-metric-link">
             <span class="dashboard-total-number"><?= $summary['replied'] ?></span>
             <span class="dashboard-total-label">Replied</span>
             <span class="dashboard-total-help">Marked as replied</span>
         </a>
-        <a href="<?= $emailListUrl('open') ?>" class="dashboard-director-total dashboard-open dashboard-metric-link">
-            <span class="dashboard-total-number"><?= $summary['open'] ?></span>
+        <a href="<?= $emailListUrl('open_not_escalated') ?>" class="dashboard-director-total dashboard-open dashboard-metric-link">
+            <span class="dashboard-total-number"><?= $summary['open_other_no_keyword'] + $summary['open_other_matched_no_reminder'] ?></span>
             <span class="dashboard-total-label">Open</span>
-            <span class="dashboard-total-help">Still needs attention</span>
+            <span class="dashboard-total-help">Not replied · not escalated · not Customer/Project or Urgent</span>
+        </a>
+        <a href="<?= $emailListUrl('open_urgent_not_escalated') ?>" class="dashboard-director-total dashboard-open dashboard-metric-link">
+            <span class="dashboard-total-number"><?= $summary['open_urgent_not_escalated'] ?></span>
+            <span class="dashboard-total-label">Urgent</span>
+            <span class="dashboard-total-help">Open · not escalated yet</span>
+        </a>
+        <a href="<?= $emailListUrl('open_escalated') ?>" class="dashboard-director-total dashboard-open dashboard-metric-link">
+            <span class="dashboard-total-number"><?= $summary['open_l1'] + $summary['open_l2'] + $summary['open_l3'] + $summary['open_customer_project'] ?></span>
+            <span class="dashboard-total-label">Escalated</span>
+            <span class="dashboard-total-help">Open · L1/L2/L3 sent, or Customer/Project</span>
         </a>
     </div>
 </section>
@@ -283,44 +356,64 @@ $departmentEmailListUrl = static function (string $category, int $departmentId):
     <div class="dashboard-section-heading">
         <div>
             <h4 id="reconciliation-title">Where are the emails?</h4>
-            <p>Each row adds up to the Replied and Open totals above. L1, L2 and L3 show the highest level reached, so an email is never counted in two levels.</p>
+            <p>Each box adds up to the totals above. L1, L2 and L3 show the highest level reached, so an email is never counted in two levels.</p>
         </div>
     </div>
     <div class="dashboard-breakdown-columns">
+        <?php
+        $openNotEscalatedTotal = $summary['open_other_no_keyword'] + $summary['open_other_matched_no_reminder'];
+        $openEscalatedTotal = $summary['open_l1'] + $summary['open_l2'] + $summary['open_l3']
+            + $summary['open_customer_project'];
+        ?>
         <?php foreach ([
-            ['title' => 'Why these ' . $summary['replied'] . ' emails are replied', 'total' => $summary['replied'], 'suffix' => 'replied'],
-            ['title' => 'Why these ' . $summary['open'] . ' emails are open', 'total' => $summary['open'], 'suffix' => 'open'],
+            [
+                'title' => 'Why these ' . $summary['replied'] . ' emails are replied',
+                'total' => $summary['replied'],
+                'link' => 'replied',
+                'items' => [
+                    ['L1 · Employee reminder sent', 'replied_l1'],
+                    ['L2 · Manager / HOD contacted', 'replied_l2'],
+                    ['L3 · HR / Admin contacted', 'replied_l3'],
+                    ['No escalation keywords matched', 'replied_no_keyword'],
+                    ['Keyword matched · no reminder sent', 'replied_matched_no_reminder'],
+                ],
+            ],
+            [
+                'title' => 'Why these ' . $openNotEscalatedTotal . ' emails are open',
+                'total' => $openNotEscalatedTotal,
+                'link' => 'open_not_escalated',
+                'items' => [
+                    ['No escalation keywords matched', 'open_other_no_keyword'],
+                    ['Keyword matched · no reminder sent', 'open_other_matched_no_reminder'],
+                ],
+            ],
+            [
+                'title' => 'Why these ' . $summary['open_urgent_not_escalated'] . ' emails are urgent',
+                'total' => $summary['open_urgent_not_escalated'],
+                'link' => 'open_urgent_not_escalated',
+                'items' => [
+                    ['Urgent · not escalated yet', 'open_urgent_not_escalated'],
+                ],
+            ],
+            [
+                'title' => 'Why these ' . $openEscalatedTotal . ' emails are escalated',
+                'total' => $openEscalatedTotal,
+                'link' => 'open_escalated',
+                'items' => [
+                    ['L1 · Employee reminder sent', 'open_l1'],
+                    ['L2 · Manager / HOD contacted', 'open_l2'],
+                    ['L3 · HR / Admin contacted', 'open_l3'],
+                    ['Customer / Project · reminder not sent yet', 'open_customer_project'],
+                ],
+            ],
         ] as $statusGroup): ?>
             <div class="dashboard-breakdown-group">
                 <h5>
                     <span><?= htmlspecialchars($statusGroup['title'], ENT_QUOTES, 'UTF-8') ?></span>
-                    <a href="<?= $emailListUrl($statusGroup['suffix']) ?>" class="dashboard-breakdown-total"><?= (int)$statusGroup['total'] ?></a>
+                    <a href="<?= $emailListUrl($statusGroup['link']) ?>" class="dashboard-breakdown-total"><?= (int)$statusGroup['total'] ?></a>
                 </h5>
-                <?php if ($statusGroup['suffix'] === 'open'): ?>
-                    <div class="dashboard-open-explainer">
-                        <a href="<?= $emailListUrl('open_escalated') ?>" class="dashboard-open-explainer-item is-escalated">
-                            <span>Escalation sent · L1/L2/L3</span>
-                            <strong><?= $summary['open_l1'] + $summary['open_l2'] + $summary['open_l3'] ?></strong>
-                        </a>
-                        <a href="<?= $emailListUrl('open_matched_no_reminder') ?>" class="dashboard-open-explainer-item is-follow-up">
-                            <span>Keyword matched · reminder not sent</span>
-                            <strong><?= $summary['open_matched_no_reminder'] ?></strong>
-                        </a>
-                        <a href="<?= $emailListUrl('open_no_keyword') ?>" class="dashboard-open-explainer-item is-not-escalated">
-                            <span>No keywords · not escalated</span>
-                            <strong><?= $summary['open_no_keyword'] ?></strong>
-                        </a>
-                    </div>
-                <?php endif; ?>
                 <div class="dashboard-breakdown-grid">
-                    <?php foreach ([
-                        ['L1 · Employee reminder sent', 'l1'],
-                        ['L2 · Manager / HOD contacted', 'l2'],
-                        ['L3 · HR / Admin contacted', 'l3'],
-                        ['No escalation keywords matched', 'no_keyword'],
-                        ['Keyword matched · no reminder sent', 'matched_no_reminder'],
-                    ] as [$label, $category]): ?>
-                        <?php $metricKey = $statusGroup['suffix'] . '_' . $category; ?>
+                    <?php foreach ($statusGroup['items'] as [$label, $metricKey]): ?>
                         <a href="<?= $emailListUrl($metricKey) ?>" class="dashboard-breakdown-item dashboard-metric-link">
                             <span><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></span>
                             <strong><?= (int)$summary[$metricKey] ?></strong>
@@ -336,7 +429,7 @@ $departmentEmailListUrl = static function (string $category, int $departmentId):
     <div class="dashboard-section-heading">
         <div>
             <h4 id="department-metrics-title">Department metrics</h4>
-            <p>Month-to-date emails are split into Replied and mutually exclusive open follow-up categories.</p>
+            <p>Emails from the selected period are split into Replied and mutually exclusive open follow-up categories.</p>
         </div>
     </div>
     <div class="dashboard-department-grid">
@@ -375,6 +468,9 @@ $departmentEmailListUrl = static function (string $category, int $departmentId):
             <p>Each employee’s total is split into replied and open emails, then grouped by the highest escalation level.</p>
         </div>
         <form method="GET" action="dashboard.php" class="employee-search-form employee-insights-search">
+            <?php foreach ($dateRangeQuery as $rangeKey => $rangeValue): ?>
+                <input type="hidden" name="<?= $rangeKey ?>" value="<?= htmlspecialchars($rangeValue) ?>">
+            <?php endforeach; ?>
             <label class="visually-hidden" for="employee-department-filter">Filter employees by department</label>
             <select
                 id="employee-department-filter"
@@ -410,7 +506,7 @@ $departmentEmailListUrl = static function (string $category, int $departmentId):
                 <?php endforeach; ?>
             </select>
             <?php if ($selectedEmployeeDepartmentId !== null || $selectedEmployeeKey !== ''): ?>
-                <a href="dashboard.php#employee-escalations" class="btn btn-sm btn-outline-secondary">Clear</a>
+                <a href="dashboard.php?<?= htmlspecialchars(http_build_query($dateRangeQuery)) ?>#employee-escalations" class="btn btn-sm btn-outline-secondary">Clear</a>
             <?php endif; ?>
         </form>
     </div>
@@ -461,6 +557,20 @@ $departmentEmailListUrl = static function (string $category, int $departmentId):
                     <a href="<?= $emailListUrl('open_l3', $row) ?>" class="employee-insight-status-item is-open">
                         <span>L3</span>
                         <strong><?= (int)$row['l3_open'] ?></strong>
+                    </a>
+                </div>
+                <div class="employee-insight-urgent">
+                    <a href="<?= $emailListUrl('urgent', $row) ?>" class="employee-insight-urgent-title">
+                        <span>Urgent mails</span>
+                        <strong><?= (int)$row['urgent_count'] ?></strong>
+                    </a>
+                    <a href="<?= $emailListUrl('replied_urgent', $row) ?>" class="employee-insight-urgent-item is-replied">
+                        <span>Replied</span>
+                        <strong><?= (int)$row['urgent_replied'] ?></strong>
+                    </a>
+                    <a href="<?= $emailListUrl('open_urgent', $row) ?>" class="employee-insight-urgent-item is-open">
+                        <span>Not replied</span>
+                        <strong><?= (int)$row['urgent_open'] ?></strong>
                     </a>
                 </div>
                 <div class="employee-insight-categories">

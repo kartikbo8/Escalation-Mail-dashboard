@@ -84,6 +84,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message = 'HOD updated.';
     }
 
+    if ($formType === 'save_group') {
+        $groupEmail = strtolower(trim((string)($_POST['group_email'] ?? '')));
+        $ownerId = (int)($_POST['owner_user_id'] ?? 0);
+        $managerId = (int)($_POST['manager_user_id'] ?? 0) ?: null;
+        $validUser = $pdo->prepare("SELECT COUNT(*) FROM users WHERE id = ? AND is_active = 1");
+        $validUser->execute([$ownerId]);
+        $ownerOk = (int)$validUser->fetchColumn() === 1;
+        $managerOk = true;
+        if ($managerId) {
+            $validUser->execute([$managerId]);
+            $managerOk = (int)$validUser->fetchColumn() === 1;
+        }
+        if (!filter_var($groupEmail, FILTER_VALIDATE_EMAIL) || !$ownerOk || !$managerOk) {
+            $message = 'Group not saved: enter a valid group email and choose an active owner (and manager).';
+        } else {
+            $pdo->prepare(
+                "INSERT INTO group_mailboxes (email, owner_user_id, manager_user_id) VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE owner_user_id = VALUES(owner_user_id), manager_user_id = VALUES(manager_user_id)"
+            )->execute([$groupEmail, $ownerId, $managerId]);
+            $message = "Group {$groupEmail} saved. New mails to this group go to its owner.";
+        }
+    }
+
+    if ($formType === 'delete_group') {
+        $pdo->prepare("DELETE FROM group_mailboxes WHERE id = ?")->execute([(int)$_POST['group_id']]);
+        $message = 'Group removed.';
+    }
+
+    if ($formType === 'assign_group_tickets') {
+        // Move this group's still-open tickets (not yet escalated) to the owner.
+        $groupStmt = $pdo->prepare(
+            "SELECT g.email, g.owner_user_id, u.name AS owner_name
+             FROM group_mailboxes g JOIN users u ON u.id = g.owner_user_id WHERE g.id = ?"
+        );
+        $groupStmt->execute([(int)$_POST['group_id']]);
+        $group = $groupStmt->fetch();
+        if ($group) {
+            $ticketStmt = $pdo->prepare(
+                "SELECT id FROM tickets
+                 WHERE status = 'open' AND escalation_level = 0 AND assigned_to <> ?
+                   AND LOWER(COALESCE(to_recipients_json, '')) LIKE ?"
+            );
+            $ticketStmt->execute([(int)$group['owner_user_id'], '%"' . strtolower($group['email']) . '"%']);
+            $ticketIds = $ticketStmt->fetchAll(PDO::FETCH_COLUMN);
+            $assign = $pdo->prepare("UPDATE tickets SET assigned_to = ? WHERE id = ?");
+            foreach ($ticketIds as $ticketId) {
+                $assign->execute([(int)$group['owner_user_id'], (int)$ticketId]);
+                logTimelineEvent((int)$ticketId, 'received',
+                    "Assigned to {$group['owner_name']} - owner of group {$group['email']}", currentUser()['id']);
+            }
+            $message = count($ticketIds) . " open ticket(s) of {$group['email']} assigned to {$group['owner_name']}.";
+        }
+    }
+
     if ($formType === 'set_mailbox') {
         $mailbox = trim($_POST['mailbox_email']) !== '' ? trim($_POST['mailbox_email']) : null;
         $pdo->prepare("UPDATE departments SET mailbox_email = ? WHERE id = ?")
@@ -93,17 +147,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $departments  = getDepartments();
-$slaSettings  = $pdo->query("SELECT * FROM sla_settings")->fetchAll(PDO::FETCH_ASSOC);
+$slaSettings  = executePreparedQuery($pdo, "SELECT * FROM sla_settings")->fetchAll(PDO::FETCH_ASSOC);
 $slaByDept    = array_column($slaSettings, 'response_hours', 'department_id');
-$workingHours = $pdo->query("SELECT * FROM working_hours ORDER BY day_of_week")->fetchAll();
-$holidays     = $pdo->query("SELECT * FROM holidays ORDER BY holiday_date")->fetchAll();
-$contacts     = $pdo->query(
+$workingHours = executePreparedQuery($pdo, "SELECT * FROM working_hours ORDER BY day_of_week")->fetchAll();
+$holidays     = executePreparedQuery($pdo, "SELECT * FROM holidays ORDER BY holiday_date")->fetchAll();
+$contacts     = executePreparedQuery($pdo,
     "SELECT ec.*, d.name as department_name FROM escalation_contacts ec
      LEFT JOIN departments d ON d.id = ec.department_id ORDER BY ec.role_type"
 )->fetchAll();
-$keywords     = $pdo->query("SELECT * FROM keyword_categories ORDER BY category, keyword")->fetchAll();
-$allUsers     = $pdo->query("SELECT id, name FROM users ORDER BY name")->fetchAll();
-$deptWithHod  = $pdo->query(
+$keywords     = executePreparedQuery($pdo, "SELECT * FROM keyword_categories ORDER BY category, keyword")->fetchAll();
+$allUsers     = executePreparedQuery($pdo, "SELECT id, name FROM users ORDER BY name")->fetchAll();
+$activeUsers  = executePreparedQuery($pdo, "SELECT id, name, email FROM users WHERE is_active = 1 ORDER BY name")->fetchAll();
+$groupMailboxes = executePreparedQuery($pdo,
+    "SELECT g.*, o.name AS owner_name, m.name AS manager_name,
+            (SELECT COUNT(*) FROM tickets t
+             WHERE t.status = 'open' AND t.escalation_level = 0 AND t.assigned_to <> g.owner_user_id
+               AND LOWER(COALESCE(t.to_recipients_json, '')) LIKE CONCAT('%\"', LOWER(g.email), '\"%')) AS open_elsewhere
+     FROM group_mailboxes g
+     JOIN users o ON o.id = g.owner_user_id
+     LEFT JOIN users m ON m.id = g.manager_user_id
+     ORDER BY g.email"
+)->fetchAll();
+$deptWithHod  = executePreparedQuery($pdo,
     "SELECT d.*, u.name as hod_name FROM departments d LEFT JOIN users u ON u.id = d.hod_user_id ORDER BY d.name"
 )->fetchAll();
 
@@ -111,7 +176,7 @@ $dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturd
 $keywordCategoryLabels = [
     'customer_project'   => 'Customer/Project (High Priority)',
     'ppc_internal'       => 'PPC/Internal',
-    'escalation_trigger' => 'Escalation Paused',
+    'escalation_trigger' => 'Urgent (badge shows the matched word)',
 ];
 ?>
 
@@ -289,6 +354,85 @@ $keywordCategoryLabels = [
                 </li>
             <?php endforeach; ?>
         </ul>
+    </div>
+</div>
+
+<!-- Group mail owners (distribution lists like northdesign@, orderlogin@) -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header">Group Mail Owners</div>
+    <div class="card-body">
+        <p class="text-muted small">
+            A mail sent to a group address reaches every member's mailbox, but the tracker makes one ticket.
+            It is assigned to the group <strong>owner</strong>; the Level 1 reminder goes to the owner and the
+            group <strong>manager</strong>, and the manager is also included at Level 2. A reply from any AFC
+            member on the thread closes it.
+        </p>
+        <form method="POST" class="row g-2 mb-3">
+            <?= csrfField() ?>
+            <input type="hidden" name="form_type" value="save_group">
+            <div class="col-md-4">
+                <input type="email" name="group_email" class="form-control" placeholder="Group email, e.g. northdesign@afcindia.in" required>
+            </div>
+            <div class="col-md-3">
+                <select name="owner_user_id" class="form-select" required>
+                    <option value="">-- Owner --</option>
+                    <?php foreach ($activeUsers as $u): ?>
+                        <option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="manager_user_id" class="form-select">
+                    <option value="">-- Manager (optional) --</option>
+                    <?php foreach ($activeUsers as $u): ?>
+                        <option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-outline-primary w-100">Save Group</button>
+            </div>
+        </form>
+        <?php if (!$groupMailboxes): ?>
+            <div class="text-muted small">No groups configured yet - group mails go to whichever member's mailbox is read first.</div>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Group</th><th>Owner</th><th>Manager</th><th>Open tickets with someone else</th><th></th></tr></thead>
+                    <tbody>
+                        <?php foreach ($groupMailboxes as $g): ?>
+                            <tr>
+                                <td><?= htmlspecialchars($g['email']) ?></td>
+                                <td><?= htmlspecialchars($g['owner_name']) ?></td>
+                                <td><?= htmlspecialchars($g['manager_name'] ?? 'Not set') ?></td>
+                                <td>
+                                    <?= (int)$g['open_elsewhere'] ?>
+                                    <?php if ((int)$g['open_elsewhere'] > 0): ?>
+                                        <form method="POST" class="d-inline ms-2">
+                                            <?= csrfField() ?>
+                                            <input type="hidden" name="form_type" value="assign_group_tickets">
+                                            <input type="hidden" name="group_id" value="<?= (int)$g['id'] ?>">
+                                            <button class="btn btn-sm btn-outline-secondary"
+                                                onclick="return confirm('Assign these open tickets (not yet escalated) to <?= htmlspecialchars($g['owner_name'], ENT_QUOTES) ?>?');">
+                                                Assign to owner
+                                            </button>
+                                        </form>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="text-end">
+                                    <form method="POST" class="m-0">
+                                        <?= csrfField() ?>
+                                        <input type="hidden" name="form_type" value="delete_group">
+                                        <input type="hidden" name="group_id" value="<?= (int)$g['id'] ?>">
+                                        <button class="btn btn-sm btn-outline-danger">Remove</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 

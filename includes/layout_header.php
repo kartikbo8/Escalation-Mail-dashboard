@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/functions.php';
 requireLogin();
 $user = currentUser();
 $portalName = portalDepartmentName();
@@ -7,8 +8,7 @@ $assistantWidgetHistory = $_SESSION['assistant_widget_chat'] ?? [];
 if (!is_array($assistantWidgetHistory)) {
     $assistantWidgetHistory = [];
 }
-$storageMonthStart = new DateTimeImmutable('first day of this month 00:00:00');
-$storageMonthEnd = $storageMonthStart->modify('first day of next month');
+$storageWindowStart = new DateTimeImmutable(dataWindowStart());
 $storageStmt = getDB()->prepare(
     "SELECT COUNT(*) AS email_count,
             COALESCE(SUM(
@@ -22,14 +22,10 @@ $storageStmt = getDB()->prepare(
             ), 0) AS stored_bytes
      FROM tickets t
      WHERE t.received_at >= ?
-       AND t.received_at < ?
        AND " . portalTicketCondition('t')
 );
-$storageStmt->execute([
-    $storageMonthStart->format('Y-m-d H:i:s'),
-    $storageMonthEnd->format('Y-m-d H:i:s'),
-]);
-$monthlyEmailStorage = $storageStmt->fetch();
+$storageStmt->execute([$storageWindowStart->format('Y-m-d H:i:s')]);
+$windowEmailStorage = $storageStmt->fetch();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -48,8 +44,11 @@ $monthlyEmailStorage = $storageStmt->fetch();
         <div class="d-flex align-items-center gap-3">
             <span class="navbar-text text-white">
                 <?= htmlspecialchars($user['name']) ?> (<?= htmlspecialchars($user['role']) ?>)
-            </span>
-            <a href="logout.php" class="btn btn-outline-light btn-sm">Logout</a>
+            </span>                                                 
+            <form method="POST" action="logout.php" class="m-0">
+                <?= csrfField() ?>
+                <button type="submit" class="btn btn-outline-light btn-sm">Logout</button>
+            </form>
         </div>
     </div>
 </nav>
@@ -122,7 +121,7 @@ $monthlyEmailStorage = $storageStmt->fetch();
             <a class="sidebar-link" href="all_emails.php">All Emails</a>
             <a class="sidebar-link" href="email_list.php">Email List</a>
             <?php if (in_array($user['role'], ['super_admin', 'admin'], true)): ?>
-                <a class="sidebar-link" href="admin_assistant.php">AI Action Assistant</a>
+                <a class="sidebar-link" href="admin_assistant.php">AI Assistant</a>
                 <a class="sidebar-link" href="users.php">Users</a>
                 <a class="sidebar-link" href="escalation_matrix_export.php">Escalation Excel</a>
             <?php endif; ?>
@@ -134,14 +133,14 @@ $monthlyEmailStorage = $storageStmt->fetch();
             <?php endif; ?>
         </nav>
 
-        <section class="sidebar-storage" aria-label="Email data storage from this month">
+        <section class="sidebar-storage" aria-label="Email data storage from the last <?= DATA_WINDOW_DAYS ?> days">
             <div class="sidebar-section-label">EMAIL DATA</div>
-            <div class="sidebar-storage-month"><?= htmlspecialchars($storageMonthStart->format('F Y')) ?></div>
+            <div class="sidebar-storage-month">Last <?= DATA_WINDOW_DAYS ?> days · <?= htmlspecialchars($storageWindowStart->format('d M')) ?> – <?= date('d M Y') ?></div>
             <div class="sidebar-storage-size">
-                <?= number_format((int)$monthlyEmailStorage['stored_bytes'] / (1024 * 1024), 2) ?> MB
+                <?= number_format((int)$windowEmailStorage['stored_bytes'] / (1024 * 1024), 2) ?> MB
             </div>
             <div class="sidebar-storage-count">
-                <?= number_format((int)$monthlyEmailStorage['email_count']) ?> email(s)
+                <?= number_format((int)$windowEmailStorage['email_count']) ?> email(s)
             </div>
             <div class="sidebar-storage-note">
                 Stored email fields only; message bodies remain in Microsoft 365.

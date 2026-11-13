@@ -1,4 +1,9 @@
 <?php
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
+
 /**
  * cron/fetch_new_mails.php
  *
@@ -49,6 +54,9 @@ function normalizeThreadSubject($subject) {
     return strtolower($normalized);
 }
 
+// Mails older than this when first fetched are tracked without reminders.
+const LATE_IMPORT_DAYS = 7;
+
 function findExistingTicketForIncomingMail($pdo, $senderEmail, $subject, $receivedAt, $conversationId, $messageId) {
     $ticket = null;
 
@@ -86,10 +94,12 @@ function findExistingTicketForIncomingMail($pdo, $senderEmail, $subject, $receiv
         return $ticket;
     }
 
+    // Same sender, subject and received second is the same mail seen from another
+    // mailbox (e.g. each member of a group address) - match it whatever its status,
+    // or a copy read after the first was replied to becomes a new open ticket.
     $select = $pdo->prepare(
         "SELECT * FROM tickets
-         WHERE status = 'open'
-           AND LOWER(sender_email) = LOWER(?)
+         WHERE LOWER(sender_email) = LOWER(?)
            AND LOWER(subject) = LOWER(?)
            AND received_at = ?
          ORDER BY id DESC
@@ -165,13 +175,33 @@ function processMailbox($pdo, $accessToken, $mailbox, $departmentId, $ownerUserI
             $conversationId,
             $msg['id'] ?? ''
         );
+        // A reply from AFC answers the ticket: the mailbox owner, or any colleague
+        // other than the original sender. Without this, the owner (always in the
+        // To list) was treated as a client follow-up and reminders restarted.
+        $isAfcReply = $ticket
+            && !isSystemNotificationMail($senderEmail, $subject)
+            && (
+                $isOurReply
+                || (str_ends_with(strtolower(trim($senderEmail)), '@afcindia.in')
+                    && strcasecmp(trim($senderEmail), trim($ticket['sender_email'])) !== 0)
+            );
         $isTrackedToReply = $ticket
+            && !$isAfcReply
             && ticketHasToRecipient($ticket, $senderEmail)
             && $receivedAt > $ticket['received_at']
             && ($ticket['replied_at'] === null || $receivedAt > $ticket['replied_at']);
 
         if (!$ticket && !$isOurReply) {
-            if (isExcludedSubject($subject)) {
+            if (isExcludedSubject($subject) || isSystemNotificationMail($senderEmail, $subject)) {
+                continue;
+            }
+            // Only the To recipients owe the reply. If this mailbox's owner was just
+            // CC'd, the mail is not theirs to track (group / NorthDesign addresses
+            // are routed below; a To person with a LIVE mailbox gets it from theirs).
+            if ($toRecipients
+                && !isset($toRecipients[strtolower($mailbox)])
+                && !findGroupMailbox(array_keys($toRecipients))
+                && !isset($toRecipients['northdesign@afcindia.in'])) {
                 continue;
             }
 
@@ -192,37 +222,35 @@ function processMailbox($pdo, $accessToken, $mailbox, $departmentId, $ownerUserI
                 $bodyFetchNote = ' (full message body unavailable; keyword scan used body preview)';
             }
 
-            // New incoming email -> configured keywords are checked in subject and full body before AI.
-                        $senderUserStmt = $pdo->prepare(
-                                "SELECT id FROM users
-                                 WHERE is_active = 1 AND department_id IS NOT NULL
-                                     AND LOWER(email) = LOWER(?)
-                                 LIMIT 1"
-                        );
-                        $senderUserStmt->execute([$senderEmail]);
-                        $senderUserId = $senderUserStmt->fetchColumn();
-                        $assignedUserId = $senderUserId ? (int)$senderUserId : $ownerUserId;
+            // New incoming email -> configured keywords are checked in the full body (not the subject).
+            // The mail is owned by whoever received it (this mailbox's owner), never
+            // by the sender - otherwise an employee who mails IT gets IT's reminders.
+            $assignedUserId = $ownerUserId;
+            // Mail to a group address goes to the group's configured owner, not to
+            // whichever member's mailbox happened to be read first.
+            $groupMailbox = findGroupMailbox(array_keys($toRecipients));
+            if ($groupMailbox) {
+                $assignedUserId = (int)$groupMailbox['owner_user_id'];
+            }
             $keywordMatch = isExcludedSubject($subject)
                 ? ['category' => 'normal', 'keyword' => null]
                 : matchTicketKeywords($subject, $bodyContent);
 
-            if (isIgnoredSender($senderEmail)) {
+            if (isIgnoredSender($senderEmail) || isNoReplyNeededMail($senderEmail, $subject)) {
                 $keywordMatch = ['category' => 'normal', 'keyword' => null];
             }
 
-            // AI only filters unmatched subjects; it must not hide a configured trigger.
-            if ($keywordMatch['category'] === 'normal') {
-                $aiClassification = classifyMailWithAI($subject, $bodyPreview);
-                if ($aiClassification && !$aiClassification['actionable'] && $aiClassification['confidence'] >= 0.80) {
-                    $keywordMatch = ['category' => 'normal', 'keyword' => null];
-                }
-            }
             $isImportant = ($keywordMatch['category'] !== 'normal') ? 1 : 0;
+            // A mail first seen long after it arrived (e.g. an old date re-synced) is
+            // already far past every deadline; keep it for record, do not start reminders.
+            $isLateImport = strtotime($receivedAt) < strtotime('-' . LATE_IMPORT_DAYS . ' days');
+            $isQueued = $isImportant && !$isLateImport ? 1 : 0;
             $slaDue = calculateSlaDueDate(
                 $receivedAt,
                 $departmentId,
                 $senderEmail,
-                $keywordMatch['keyword']
+                $keywordMatch['keyword'],
+                $keywordMatch['category']
             );
             $toRecipientsJson = json_encode(array_values($toRecipients));
 
@@ -234,23 +262,25 @@ function processMailbox($pdo, $accessToken, $mailbox, $departmentId, $ownerUserI
             );
             $insert->execute([
                 $departmentId, $subject, $senderEmail, $toRecipientsJson, $conversationId,
-                $msg['id'], $mailbox, $keywordMatch['category'], $keywordMatch['keyword'], $isImportant, $isImportant,
+                $msg['id'], $mailbox, $keywordMatch['category'], $keywordMatch['keyword'], $isImportant, $isQueued,
                 $assignedUserId, $receivedAt, $receivedAt, $slaDue,
             ]);
             $newTicketId = $pdo->lastInsertId();
-            $assignNote = $senderUserId
-                ? ' - auto-assigned to sender employee'
+            $assignNote = $groupMailbox
+                ? " - sent to group {$groupMailbox['email']}, assigned to the group owner"
                 : ($ownerUserId ? ' - auto-assigned to mailbox owner' : '');
             logTimelineEvent($newTicketId, 'received', 'Email received from ' . $senderEmail . $assignNote .
                 ($keywordMatch['keyword']
-                    ? " (matched keyword: {$keywordMatch['keyword']} - IMPORTANT, queued for escalation)"
+                    ? ($isQueued
+                        ? " (matched keyword: {$keywordMatch['keyword']} - IMPORTANT, queued for escalation)"
+                        : " (matched keyword: {$keywordMatch['keyword']} - mail is over " . LATE_IMPORT_DAYS
+                            . ' days old, imported for record only - no reminder or escalation)')
                     : " (no keyword matched - will not escalate beyond employee)") . $bodyFetchNote);
             $created++;
 
         } elseif (
-            $ticket
-            && $isOurReply
-            && !$isTrackedToReply
+            $isAfcReply
+            && $receivedAt > $ticket['received_at']
             && (
                 in_array($ticket['status'], ['open', 'escalated'], true)
                 || ($ticket['status'] === 'closed' && (int)$ticket['escalation_level'] > 0)
@@ -263,7 +293,9 @@ function processMailbox($pdo, $accessToken, $mailbox, $departmentId, $ownerUserI
             } else {
                 $pdo->prepare("UPDATE tickets SET status='replied', replied_at=?, closed_at=NULL WHERE id=?")
                     ->execute([$receivedAt, $ticket['id']]);
-                logTimelineEvent($ticket['id'], 'replied', 'Reply sent by mailbox owner');
+                logTimelineEvent($ticket['id'], 'replied', $isOurReply
+                    ? "Reply sent by mailbox owner {$senderEmail}"
+                    : "Reply sent by AFC colleague {$senderEmail}");
                 $repliedCount++;
             }
         } elseif (
@@ -310,20 +342,33 @@ function processMailbox($pdo, $accessToken, $mailbox, $departmentId, $ownerUserI
                 logTimelineEvent(
                     $ticket['id'],
                     'replied',
-                    ucfirst($responseSenderType) . ' reply classified as resolved by AI; reminders stopped'
+                    ucfirst($responseSenderType) . ' reply classified as resolved by '
+                        . (($clientReply['source'] ?? 'ai') === 'rule' ? 'acknowledgement rule (AI unavailable)' : 'AI')
+                        . '; reminders stopped'
                 );
                 $repliedCount++;
                 continue;
             }
 
-            $keywordMatch = matchTicketKeywords($subject, $clientReplyBody);
+            // A reply quotes the earlier thread, so only the newly written text can add a keyword.
+            $keywordMatch = isIgnoredSender($ticket['sender_email'])
+                    || isNoReplyNeededMail($ticket['sender_email'], $ticket['subject'])
+                ? ['category' => 'normal', 'keyword' => null]
+                : matchTicketKeywords($subject, stripQuotedReplyText($clientReplyBody));
+            // A reply can raise the priority (e.g. Customer/Project -> Urgent), never lower it.
+            $priorityRank = ['normal' => 0, 'ppc_internal' => 1, 'customer_project' => 2, 'escalation_trigger' => 3];
+            if (($priorityRank[$keywordMatch['category']] ?? 0) <= ($priorityRank[$ticket['priority_tag']] ?? 0)) {
+                $keywordMatch = ['category' => 'normal', 'keyword' => null];
+            }
             $isImportant = !empty($ticket['is_important']) || $keywordMatch['category'] !== 'normal';
             $isQueued = !empty($ticket['escalation_queued']) || $keywordMatch['category'] !== 'normal';
             $priorityTag = $keywordMatch['category'] !== 'normal' ? $keywordMatch['category'] : $ticket['priority_tag'];
             $matchedKeyword = $keywordMatch['keyword'] ?: $ticket['matched_keyword'];
             $wasAlreadyActive = $ticket['status'] === 'open';
+            // Level 3 is final: a follow-up must not restart reminders/escalation.
+            $escalationFinished = (int)$ticket['escalation_level'] >= 2;
 
-            if ($wasAlreadyActive) {
+            if ($wasAlreadyActive || $escalationFinished) {
                 $pdo->prepare(
                     "UPDATE tickets
                      SET replied_at=?, is_important=?, escalation_queued=?, priority_tag=?, matched_keyword=?
@@ -341,7 +386,8 @@ function processMailbox($pdo, $accessToken, $mailbox, $departmentId, $ownerUserI
                     $receivedAt,
                     $ticket['department_id'],
                     $ticket['sender_email'],
-                    $matchedKeyword
+                    $matchedKeyword,
+                    $priorityTag
                 );
                 $pdo->prepare(
                     "UPDATE tickets
@@ -366,6 +412,14 @@ function processMailbox($pdo, $accessToken, $mailbox, $departmentId, $ownerUserI
                 : ($clientReply['confidence'] < 0.80
                     ? 'AI reply classification uncertain'
                     : 'AI classified client reply as unresolved');
+            if ($escalationFinished) {
+                logTimelineEvent(
+                    $ticket['id'],
+                    'no_reply_warning',
+                    "{$classificationNote} ({$responseSenderType}); Level 3 escalation already completed - not restarted"
+                );
+                continue;
+            }
             logTimelineEvent(
                 $ticket['id'],
                 $wasAlreadyActive ? 'no_reply_warning' : 'reopened',
@@ -384,7 +438,7 @@ $totalReplied = 0;
 
 // Only mailboxes explicitly enabled from Users > Monitor Mailbox are scanned.
 // This prevents tickets and notifications being created for every active user.
-$monitoredUsers = $pdo->query(
+$monitoredUsers = executePreparedQuery($pdo,
     "SELECT id, email, department_id
      FROM users
      WHERE is_active = 1

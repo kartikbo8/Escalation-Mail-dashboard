@@ -7,7 +7,7 @@ $pdo = getDB();
 
 // Overall status counts for keyword-matched, queued, or escalated tickets only
 $ticketScope = "(is_important = 1 OR escalation_queued = 1 OR status = 'escalated')";
-$statusCounts = $pdo->query(
+$statusCounts = executePreparedQuery($pdo,
     "SELECT CASE WHEN t.escalation_level >= 2 OR t.status = 'escalated'
                  THEN 'escalated' ELSE t.status END AS status,
             COUNT(*) as total
@@ -22,7 +22,7 @@ foreach (['open', 'replied', 'closed', 'escalated'] as $s) {
 }
 
 // Per-department breakdown
-$deptStats = $pdo->query(
+$deptStats = executePreparedQuery($pdo,
     "SELECT d.name,
         SUM(CASE WHEN t.status = 'open' THEN 1 ELSE 0 END) as open_count,
         SUM(CASE WHEN t.status = 'replied' THEN 1 ELSE 0 END) as replied_count,
@@ -37,7 +37,7 @@ $deptStats = $pdo->query(
 )->fetchAll();
 
 // Currently escalated (Level 3 / final) tickets - need attention
-$escalatedTickets = $pdo->query(
+$escalatedTickets = executePreparedQuery($pdo,
     "SELECT t.*, d.name as department_name, u.name as assignee_name
      FROM tickets t
      JOIN departments d ON d.id = t.department_id
@@ -48,7 +48,7 @@ $escalatedTickets = $pdo->query(
 )->fetchAll();
 
 // Currently at Level 2 (with manager/HOD, not yet final)
-$level2Tickets = $pdo->query(
+$level2Tickets = executePreparedQuery($pdo,
     "SELECT t.*, d.name as department_name, u.name as assignee_name
      FROM tickets t
      JOIN departments d ON d.id = t.department_id
@@ -58,7 +58,7 @@ $level2Tickets = $pdo->query(
 )->fetchAll();
 
 // Open tickets nearing breach (next 4 hours)
-$nearingBreach = $pdo->query(
+$nearingBreach = executePreparedQuery($pdo,
     "SELECT t.*, d.name as department_name, u.name as assignee_name
      FROM tickets t
      JOIN departments d ON d.id = t.department_id

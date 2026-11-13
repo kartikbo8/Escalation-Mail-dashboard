@@ -5,42 +5,107 @@ requireRole(['super_admin', 'admin']);
 
 $pdo = getDB();
 $message = '';
+$activationToken = null;
+$managedUserScope = portalUserCondition('u');
+if (currentUser()['role'] === 'admin') {
+    $managedUserScope .= " AND u.role = 'user'";
+}
+$validateManagerId = static function ($value, $targetUserId = null) use ($pdo) {
+    if ($value === null || $value === '') {
+        return null;
+    }
+    $managerId = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    if ($managerId === false || ($targetUserId !== null && (int)$managerId === (int)$targetUserId)) {
+        return false;
+    }
+    $stmt = $pdo->prepare(
+        "SELECT id FROM users u WHERE u.id = ? AND " . portalUserCondition('u') . " LIMIT 1"
+    );
+    $stmt->execute([(int)$managerId]);
+    return $stmt->fetch() ? (int)$managerId : false;
+};
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireCsrfToken();
     $formType = $_POST['form_type'] ?? '';
+    $postedUserId = filter_var($_POST['user_id'] ?? null, FILTER_VALIDATE_INT, [
+        'options' => ['min_range' => 1],
+    ]);
+    $targetUser = null;
+    if ($formType !== 'add_user') {
+        if ($postedUserId === false) {
+            http_response_code(400);
+            exit('Invalid user.');
+        }
+        $targetStmt = $pdo->prepare(
+            "SELECT id, role, is_active, password_set
+             FROM users u WHERE u.id = ? AND {$managedUserScope} LIMIT 1"
+        );
+        $targetStmt->execute([$postedUserId]);
+        $targetUser = $targetStmt->fetch();
+        if (!$targetUser) {
+            http_response_code(403);
+            exit('User not found or access denied.');
+        }
+    }
 
     if ($formType === 'add_user') {
-        $existing = $pdo->prepare("SELECT id FROM users WHERE email = ?");
-        $existing->execute([$_POST['email']]);
+        $name = trim((string)($_POST['name'] ?? ''));
+        $email = strtolower(trim((string)($_POST['email'] ?? '')));
+        $role = (string)($_POST['role'] ?? 'user');
+        $deptId = ($_POST['department_id'] ?? '') !== '' ? (int)$_POST['department_id'] : null;
+        $allowedDeptIds = portalDepartmentIds();
+        $roleAllowed = in_array($role, ['user', 'admin', 'super_admin'], true)
+            && (currentUser()['role'] === 'super_admin' || $role === 'user');
+        $deptAllowed = currentUser()['role'] === 'super_admin'
+            || ($deptId !== null && in_array($deptId, $allowedDeptIds, true));
+        if ($name === '' || strlen($name) > 150 || !filter_var($email, FILTER_VALIDATE_EMAIL)
+            || !$roleAllowed || !$deptAllowed) {
+            http_response_code(400);
+            exit('Invalid user details or access denied.');
+        }
+        $existing = $pdo->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
+        $existing->execute([$email]);
 
         if ($existing->fetch()) {
             $message = 'A user with this email already exists.';
         } else {
-            // No password is set here - the employee sets their own on first
-            // login (see login.php). This placeholder is unusable on its own.
             $hash = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
-            $managerId = $_POST['reporting_manager_id'] !== '' ? $_POST['reporting_manager_id'] : null;
-            $manager2Id = $_POST['reporting_manager_2_id'] !== '' ? $_POST['reporting_manager_2_id'] : null;
-            $deptId    = $_POST['department_id'] !== '' ? $_POST['department_id'] : null;
+            $managerId = $validateManagerId($_POST['reporting_manager_id'] ?? null);
+            $manager2Id = $validateManagerId($_POST['reporting_manager_2_id'] ?? null);
+            if ($managerId === false || $manager2Id === false) {
+                http_response_code(403);
+                exit('Invalid reporting manager or access denied.');
+            }
 
             $stmt = $pdo->prepare(
                 "INSERT INTO users (name, email, password_hash, password_set, role, department_id, reporting_manager_id, reporting_manager_2_id)
                  VALUES (?, ?, ?, 0, ?, ?, ?, ?)"
             );
-            $stmt->execute([$_POST['name'], $_POST['email'], $hash, $_POST['role'], $deptId, $managerId, $manager2Id]);
-            $message = 'Employee added. They can log in with just their email - they\'ll be asked to set their own password on first login.';
+            $stmt->execute([$name, $email, $hash, $role, $deptId, $managerId, $manager2Id]);
+            $activationToken = createAccountActivationToken((int)$pdo->lastInsertId());
+            $message = 'Account created. Give its one-time activation token to the intended account holder through a verified channel.';
         }
     }
 
     if ($formType === 'update_manager') {
-        $userId = (int)$_POST['user_id'];
+        $userId = (int)$postedUserId;
         $currentUser = $pdo->prepare("SELECT reporting_manager_id, reporting_manager_2_id FROM users WHERE id = ?");
         $currentUser->execute([$userId]);
         $current = $currentUser->fetch();
 
-        $managerId = array_key_exists('reporting_manager_id', $_POST) ? ($_POST['reporting_manager_id'] !== '' ? $_POST['reporting_manager_id'] : null) : ($current['reporting_manager_id'] ?? null);
-        $manager2Id = array_key_exists('reporting_manager_2_id', $_POST) ? ($_POST['reporting_manager_2_id'] !== '' ? $_POST['reporting_manager_2_id'] : null) : ($current['reporting_manager_2_id'] ?? null);
+        $managerId = $validateManagerId(
+            $_POST['reporting_manager_id'] ?? ($current['reporting_manager_id'] ?? null),
+            $userId
+        );
+        $manager2Id = $validateManagerId(
+            $_POST['reporting_manager_2_id'] ?? ($current['reporting_manager_2_id'] ?? null),
+            $userId
+        );
+        if ($managerId === false || $manager2Id === false) {
+            http_response_code(403);
+            exit('Invalid reporting manager or access denied.');
+        }
 
         $pdo->prepare("UPDATE users SET reporting_manager_id = ?, reporting_manager_2_id = ? WHERE id = ?")
             ->execute([$managerId, $manager2Id, $userId]);
@@ -48,8 +113,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($formType === 'update_department') {
-        $userId = (int)$_POST['user_id'];
+        $userId = (int)$postedUserId;
         $departmentId = $_POST['department_id'] !== '' ? (int)$_POST['department_id'] : null;
+        if (currentUser()['role'] !== 'super_admin'
+            && ($departmentId === null || !in_array($departmentId, portalDepartmentIds(), true))) {
+            http_response_code(403);
+            exit('Access denied.');
+        }
         $pdo->prepare("UPDATE users SET department_id = ? WHERE id = ?")->execute([$departmentId, $userId]);
         $message = 'Department updated.';
     }
@@ -62,15 +132,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($formType === 'set_active') {
-        $userId = (int)$_POST['user_id'];
+        // An inactive mailbox owner gets no reminders or escalations, so only
+        // the Director/HR tier may switch accounts on or off.
+        requireRole(['super_admin']);
+        $userId = (int)$postedUserId;
         $isActive = (int)($_POST['is_active'] ?? 0) === 1 ? 1 : 0;
-        $pdo->prepare("UPDATE users SET is_active = ? WHERE id = ?")->execute([$isActive, $userId]);
+        $pdo->prepare("UPDATE users SET is_active = ?, auth_version = auth_version + 1 WHERE id = ?")
+            ->execute([$isActive, $userId]);
         $message = 'User status updated.';
     }
 
     if ($formType === 'set_monitor_mailbox') {
         requireRole(['super_admin']); // turning on live mail monitoring for someone's personal mailbox
-        $userId = (int)$_POST['user_id'];
+        $userId = (int)$postedUserId;
         $monitor = (int)($_POST['monitor'] ?? 0) === 1 ? 1 : 0;
         $pdo->prepare("UPDATE users SET monitor_mailbox = ? WHERE id = ?")->execute([$monitor, $userId]);
         $message = $monitor ? 'Mailbox monitoring turned ON - this is now LIVE.' : 'Mailbox monitoring turned off.';
@@ -78,34 +152,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($formType === 'update_role') {
         requireRole(['super_admin']); // only Director/HR tier can grant admin/super_admin
-        $userId = (int)$_POST['user_id'];
+        $userId = (int)$postedUserId;
         $newRole = $_POST['role'];
         if (in_array($newRole, ['user', 'admin', 'super_admin'])) {
-            $pdo->prepare("UPDATE users SET role = ? WHERE id = ?")->execute([$newRole, $userId]);
+            $pdo->prepare(
+                "UPDATE users
+                 SET role = ?, auth_version = auth_version + 1,
+                     activation_token_hash = NULL, activation_expires_at = NULL
+                 WHERE id = ?"
+            )->execute([$newRole, $userId]);
             $message = 'Role updated.';
         }
     }
 
-    if ($formType === 'reset_password') {
+    if ($formType === 'issue_password_reset') {
         requireRole(['super_admin']); // only Director/HR tier can reset a login password
-        $userId = (int)$_POST['user_id'];
-        $newPassword = $_POST['new_password'];
-        $roleStmt = $pdo->prepare("SELECT role FROM users WHERE id = ?");
-        $roleStmt->execute([$userId]);
-        $targetRole = $roleStmt->fetchColumn();
-        if ($targetRole !== 'admin') {
-            $message = 'Password can only be set for an Admin (Manager).';
-        } elseif (strlen($newPassword) >= 6) {
-            $hash = password_hash($newPassword, PASSWORD_DEFAULT);
-            $pdo->prepare("UPDATE users SET password_hash = ?, password_set = 1 WHERE id = ?")->execute([$hash, $userId]);
-            $message = 'Password reset. Share the new password with the employee directly (not via this app).';
-        } else {
-            $message = 'Password must be at least 6 characters.';
-        }
+        $userId = (int)$postedUserId;
+        $hash = password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT);
+        $pdo->prepare(
+            "UPDATE users
+             SET password_hash = ?, password_set = 0, auth_version = auth_version + 1,
+                 activation_token_hash = NULL, activation_expires_at = NULL
+             WHERE id = ?"
+        )->execute([$hash, $userId]);
+        $activationToken = createAccountActivationToken($userId);
+        $message = $activationToken
+            ? 'Password reset token created. Give it to the account holder through a verified channel.'
+            : 'Could not create a reset token. Ensure the account is active.';
     }
 
     if ($formType === 'delete_user') {
-        $userId = (int)$_POST['user_id'];
+        requireRole(['super_admin']);
+        $userId = (int)$postedUserId;
 
         if ($userId === (int)$_SESSION['user_id']) {
             $message = 'You cannot delete your own account.';
@@ -114,6 +192,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$userId]);
             $message = $stmt->rowCount() ? 'User deleted.' : 'User not found.';
         }
+    }
+
+    if ($formType === 'issue_activation') {
+        requireRole(['super_admin']);
+        $activationToken = createAccountActivationToken((int)$postedUserId);
+        $message = $activationToken
+            ? 'One-time activation token created. Give it to the account holder through a verified channel.'
+            : 'Could not issue token. The account may already be active or have a password.';
     }
 }
 
@@ -128,13 +214,13 @@ $userSql = "SELECT u.*, d.name as department_name, d.hod_user_id,
             LEFT JOIN users m2 ON m2.id = u.reporting_manager_2_id
             LEFT JOIN users h ON h.id = d.hod_user_id";
 $userParams = [];
-$userScope = portalDepartmentId() === null ? '' : 'u.department_id = ' . portalDepartmentId();
+$userScope = $managedUserScope;
 
 if ($userSearch !== '') {
-    $userSql .= " WHERE " . ($userScope ? $userScope . " AND " : '') . "(u.name LIKE ? OR u.email LIKE ? OR u.role LIKE ? OR d.name LIKE ?)";
+    $userSql .= " WHERE {$userScope} AND (u.name LIKE ? OR u.email LIKE ? OR u.role LIKE ? OR d.name LIKE ?)";
     $userTerm = '%' . $userSearch . '%';
     $userParams = [$userTerm, $userTerm, $userTerm, $userTerm];
-} elseif ($userScope) {
+} else {
     $userSql .= " WHERE {$userScope}";
 }
 
@@ -144,7 +230,7 @@ $userStmt->execute($userParams);
 $users = $userStmt->fetchAll();
 
 $departments = getDepartments();
-$allUsersStmt = $pdo->prepare("SELECT id, name FROM users WHERE " . (portalDepartmentId() === null ? '1=1' : 'department_id = ' . portalDepartmentId()) . " ORDER BY name");
+$allUsersStmt = $pdo->prepare("SELECT u.id, u.name FROM users u WHERE " . portalUserCondition('u') . " ORDER BY u.name");
 $allUsersStmt->execute();
 $allUsers = $allUsersStmt->fetchAll();
 ?>
@@ -161,11 +247,18 @@ $allUsers = $allUsersStmt->fetchAll();
 <?php if ($message): ?>
     <div class="alert alert-info"><?= htmlspecialchars($message) ?></div>
 <?php endif; ?>
+<?php if ($activationToken !== null): ?>
+    <div class="alert alert-warning">
+        <strong>One-time setup token</strong> — share it only with the verified account holder through a separate trusted channel.
+        It expires in 24 hours and is shown only once:
+        <code class="d-block text-break mt-1"><?= htmlspecialchars($activationToken, ENT_QUOTES, 'UTF-8') ?></code>
+    </div>
+<?php endif; ?>
 
 <div class="card shadow-sm mb-4">
     <div class="card-header">Add Employee</div>
     <div class="card-body">
-        <p class="text-muted small">No password needed here - the employee sets their own the first time they log in with this email.</p>
+        <p class="text-muted small">A one-time activation token is generated after creation. Verify the recipient's identity before sharing it.</p>
         <form method="POST" class="row g-2">
             <?= csrfField() ?>
             <input type="hidden" name="form_type" value="add_user">
@@ -350,6 +443,9 @@ $allUsers = $allUsersStmt->fetchAll();
                         <?php endif; ?>
                     </td>
                     <td data-label="Account Status">
+                        <?php if (currentUser()['role'] !== 'super_admin'): ?>
+                            <span class="badge <?= $u['is_active'] ? 'bg-success' : 'bg-secondary' ?>"><?= $u['is_active'] ? 'Active' : 'Inactive' ?></span>
+                        <?php else: ?>
                         <form method="POST">
                             <?= csrfField() ?>
                             <input type="hidden" name="form_type" value="set_active">
@@ -364,21 +460,33 @@ $allUsers = $allUsersStmt->fetchAll();
                             <input type="hidden" name="is_active" value="0">
                             <button type="submit" class="btn btn-sm btn-primary" <?= !$u['is_active'] ? 'disabled' : '' ?>>Inactive</button>
                         </form>
+                        <?php endif; ?>
                     </td>
                     <td data-label="Actions">
+                        <?php if (currentUser()['role'] === 'super_admin'): ?>
                         <form method="POST" onsubmit="return confirm('Delete this user permanently?');">
                             <?= csrfField() ?>
                             <input type="hidden" name="form_type" value="delete_user">
                             <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
                             <button type="submit" class="btn btn-sm btn-danger" <?= $u['id'] == $_SESSION['user_id'] ? 'disabled title="You cannot delete your own account"' : '' ?>>Delete</button>
                         </form>
-                        <?php if (currentUser()['role'] === 'super_admin' && $u['role'] === 'admin'): ?>
-                            <form method="POST" class="d-flex gap-1 mt-1" onsubmit="return this.new_password.value.length >= 6 || alert('Password must be at least 6 characters');">
+                        <?php endif; ?>
+                        <?php if (currentUser()['role'] === 'super_admin' && (int)$u['password_set'] === 0): ?>
+                            <form method="POST" class="mt-1">
                                 <?= csrfField() ?>
-                                <input type="hidden" name="form_type" value="reset_password">
+                                <input type="hidden" name="form_type" value="issue_activation">
                                 <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
-                                <input type="text" name="new_password" class="form-control form-control-sm" placeholder="New password" style="width:120px;">
-                                <button type="submit" class="btn btn-sm btn-outline-secondary">Set</button>
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">Issue setup token</button>
+                            </form>
+                        <?php elseif (currentUser()['role'] === 'super_admin'): ?>
+                            <form method="POST" class="mt-1">
+                                <?= csrfField() ?>
+                                <input type="hidden" name="form_type" value="issue_password_reset">
+                                <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary"
+                                        onclick="return confirm('Invalidate this user’s current password and issue a one-time reset token?')">
+                                    Reset password
+                                </button>
                             </form>
                         <?php endif; ?>
                     </td>

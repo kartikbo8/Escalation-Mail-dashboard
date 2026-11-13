@@ -1,0 +1,9 @@
+Options -Indexes
+
+<FilesMatch "(?i)(^\.|\.env(?:\..*)?$|\.sql$|\.log$|\.bak$|\.backup$|~$|\.swp$|seed_admin\.php$)">
+    Require all denied
+</FilesMatch>
+
+RewriteEngine On
+RewriteRule ^\.(?:git|github|svn|hg)(?:/|$) - [F,L,NC]
+RewriteRule ^(?:config|database|includes|cron|logs|backups?)(?:/|$) - [F,L,NC]

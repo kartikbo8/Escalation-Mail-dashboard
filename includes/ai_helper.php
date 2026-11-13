@@ -6,6 +6,12 @@ function requestGeminiText($systemInstruction, $contents, $responseMimeType = nu
         $GLOBALS['gemini_last_failure'] = 'missing_api_key';
         return null;
     }
+    // After a quota / rate-limit error, stop calling Gemini for the rest of this
+    // run instead of failing (and logging) once per email.
+    if (!empty($GLOBALS['gemini_quota_exhausted'])) {
+        $GLOBALS['gemini_last_failure'] = 'http_429';
+        return null;
+    }
 
     $generationConfig = ['temperature' => 0];
     if ($responseMimeType !== null) {
@@ -70,6 +76,9 @@ function requestGeminiText($systemInstruction, $contents, $responseMimeType = nu
                 . (is_string($errorMessage) && $errorMessage !== '' ? ': ' . $errorMessage : '.')
             );
             $GLOBALS['gemini_last_failure'] = 'http_' . $httpCode;
+            if ($httpCode === 429) {
+                $GLOBALS['gemini_quota_exhausted'] = true;
+            }
             return null;
         }
 
@@ -287,21 +296,23 @@ function generateAdminAssistantFallback($question, $conversation = []) {
         : "I understand your question is about this application. Let’s work through it together. Share the page/action and the exact error text with private details removed. For a ticket workflow, the status, department, assignee, due time, recent timeline, and notification-pause setting can help identify a next step. For email/reminder delivery, verify the recipient; an administrator can check Graph configuration if needed. Please don’t share email contents, passwords, tokens, or personal data.";
 }
 
-function classifyMailWithAI($subject, $bodyPreview = '') {
-    $classification = requestMailClassification(
-        'Classify an email for a response escalation workflow. Return JSON only: {"actionable":true|false,"confidence":0-1}. Mark actionable false for posters, celebrations, newsletters, automated notifications, HRMS updates, no-reply notices, and informational messages. Mark actionable true only when a human response or work action is reasonably required.',
-        $subject,
-        $bodyPreview
-    );
-    if (!is_array($classification)
-        || !isset($classification['actionable'], $classification['confidence'])) {
+/**
+ * Fallback when Gemini is unavailable: a short, plain acknowledgement
+ * ("Thanks", "Noted", "Received, will check") counts as resolved. Anything with
+ * a question, a request or a problem word is left unresolved (returns null).
+ */
+function classifyClientReplyByRules($body) {
+    $text = stripQuotedReplyText($body);
+    $text = trim(preg_replace('/\s+/u', ' ', $text));
+    if ($text === '' || mb_strlen($text) > 160) {
         return null;
     }
-
-    return [
-        'actionable' => (bool)$classification['actionable'],
-        'confidence' => (float)$classification['confidence'],
-    ];
+    $acknowledgement = '/^(?:(?:hi|hello|dear)\b[^,.!]{0,40}[,.!]?\s*)?(?:many\s+|thanks?\s+a\s+lot|thank\s*(?:you|u)|thanks|thx|noted|well\s+noted|received|well\s+received|ok(?:ay)?|done|great|perfect|acknowledged|got\s+it|sure)\b/i';
+    $openIssue = '/\?|\b(?:please|pls|kindly|pending|not\s+(?:yet|received|done|working|clear)|still|issue|problem|wrong|incorrect|urgent|asap|share|send|revert|update\s+me|when|why|how)\b/i';
+    if (!preg_match($acknowledgement, $text) || preg_match($openIssue, $text)) {
+        return null;
+    }
+    return ['satisfied' => true, 'confidence' => 0.85, 'source' => 'rule'];
 }
 
 function classifyClientReplyWithAI($subject, $bodyPreview = '') {
@@ -316,12 +327,13 @@ function classifyClientReplyWithAI($subject, $bodyPreview = '') {
         || !is_numeric($classification['confidence'])
         || (float)$classification['confidence'] < 0
         || (float)$classification['confidence'] > 1) {
-        return null;
+        return classifyClientReplyByRules($bodyPreview);
     }
 
     return [
         'satisfied' => (bool)$classification['satisfied'],
         'confidence' => (float)$classification['confidence'],
+        'source' => 'ai',
     ];
 }
 

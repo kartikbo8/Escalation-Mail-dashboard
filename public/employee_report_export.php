@@ -19,12 +19,12 @@ $employeeSql = "SELECT u.id, u.name, u.department_id, d.name AS department_name
                 WHERE u.id = ? AND u.role = 'user'";
 $employeeParams = [(int)$employeeId];
 if ($user['role'] !== 'super_admin') {
-    if (empty($user['department_id'])) {
+    $departmentIds = portalDepartmentIds();
+    if (!$departmentIds) {
         http_response_code(403);
         exit('You do not have access to this employee report.');
     }
-    $employeeSql .= ' AND u.department_id = ?';
-    $employeeParams[] = (int)$user['department_id'];
+    $employeeSql .= ' AND u.department_id IN (' . implode(',', array_map('intval', $departmentIds)) . ')';
 }
 $employeeStmt = getDB()->prepare($employeeSql);
 $employeeStmt->execute($employeeParams);

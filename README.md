@@ -26,6 +26,11 @@ Holidays and non-working days are automatically skipped in every 48/24-hour
 window, so a multi-day festival doesn't eat into anyone's response time.
 ```
 
+Emails from `naukri.com` (including its subdomains) are treated as normal mail
+and are excluded from automatic reminders and escalation. To reclassify
+existing tickets from those senders, run
+`php cron/reclassify_ticket_keywords.php` once.
+
 ## Folder Structure
 ```
 escalation-tracker/
@@ -33,7 +38,8 @@ escalation-tracker/
 │   ├── schema.sql                          -> import FIRST
 │   ├── migration_2_escalation_matrix.sql    -> import SECOND (keywords, Sales dept)
 │   ├── migration_3_multilevel_escalation.sql-> import THIRD (manager/HOD hierarchy)
-│   └── seed_admin.php                       -> run once, then delete
+│   ├── seed_admin.php                       -> CLI-only initial admin bootstrap
+│   └── reset_admin.php                      -> CLI-only legacy admin password reset
 ├── config/
 │   ├── db.php
 │   └── graph.php
@@ -65,11 +71,23 @@ escalation-tracker/
    you do NOT need to run them separately on a fresh database.
    On an existing database, run `database/migration_15_ticket_to_recipients.sql`
    to enable AI-checked replies from addresses in new tickets' To lists.
-2. Run `database/seed_admin.php` once (creates admin@example.com / admin123), then delete it
-3. Login -> go to **Users** page -> add your employees, set each one's Reporting Manager
-4. Go to **Settings** -> set each department's HOD (dropdown), review/add keywords, confirm
+2. On an existing database, apply `database/migration_16_secure_account_activation.sql`
+   after `migration_7_self_password_setup.sql`. Fresh installs already include the
+   password setup and activation columns in `database/schema.sql`.
+3. Create the initial administrator from a local terminal only:
+   `php database/seed_admin.php`. The script refuses web requests and refuses to
+   seed over an existing account. It prints a one-time token that expires after
+   24 hours; verify the recipient and deliver it through a separate trusted
+   channel. Set a password with at least 12 characters, uppercase, lowercase,
+   and a number at `public/activate.php`.
+   For an existing install with a legacy seed/admin password, first run
+   `php database/reset_admin.php` from a trusted CLI after the migration to revoke
+   that password and issue a fresh activation token.
+4. Sign in -> go to **Users** page -> add employees and share each one-time setup
+   token only after verifying the employee's identity; set reporting managers.
+5. Go to **Settings** -> set each department's HOD (dropdown), review/add keywords, confirm
    HR (Priya Singh) and Admin contact rows under "HR / Admin Escalation Contacts"
-5. Test the flow (see previous testing notes) - create a test ticket, assign it to a real
+6. Test the flow (see previous testing notes) - create a test ticket, assign it to a real
    employee with a manager, and manually run `cron/check_escalations.php` after each SLA
    window to watch it move: Level 1 -> Level 2 -> Level 3
 
@@ -230,13 +248,15 @@ at Level 2/Level 3, tickets nearing SLA breach). To turn it into an actual PDF f
 No extra PHP library needed - this uses the browser's own built-in PDF export, so it
 works on any machine without additional setup.
 
-## Keyword-Gated Escalation (only subject-matched emails escalate)
+## Keyword-Gated Escalation (only body-matched emails escalate)
 
 Per HR's matrix, escalation is now gated by the `is_important` / `escalation_queued`
 flags (set in `migration_5_subject_keyword_priority.sql`):
 
-- When a new email arrives, `matchTicketKeywords()` checks the **subject line only**
-  against your configured keywords (Settings -> Keyword Categories).
+- When a new email arrives, `matchTicketKeywords()` checks the **mail body only**
+  (never the subject) against your configured keywords (Settings -> Keyword Categories).
+  On a reply to an existing ticket, only the newly written text is checked - the
+  quoted earlier thread below it is ignored.
 - A match sets `is_important = 1` and `escalation_queued = 1` on the ticket.
 - **Only** important/queued tickets go through Level 2 (Manager+HOD) and Level 3
   (Director+HR) escalation. A normal ticket that breaches its SLA stays with the
